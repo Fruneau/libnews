@@ -1,0 +1,7 @@
+//
+// Prefix header for all source files of the 'libnews' target in the 'libnews' project
+//
+
+#ifdef __OBJC__
+    #import <Cocoa/Cocoa.h>
+#endif
