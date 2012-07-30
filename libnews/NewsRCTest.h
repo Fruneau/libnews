@@ -1,13 +1,13 @@
 //
-//  libnews.h
+//  NewsRCTest.h
 //  libnews
 //
 //  Created by Florent Bruneau on 29/07/12.
 //  Copyright (c) 2012 Florent Bruneau. All rights reserved.
 //
 
-#import <Foundation/Foundation.h>
+#import <SenTestingKit/SenTestingKit.h>
 
-@interface libnews : NSObject
+@interface NewsRCTest : SenTestCase
 
 @end
