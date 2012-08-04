@@ -14,7 +14,13 @@
 		B40DD32415C58180001EB875 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B40DD32215C58180001EB875 /* InfoPlist.strings */; };
 		B40DD33215C581DF001EB875 /* NewsRC.h in Headers */ = {isa = PBXBuildFile; fileRef = B40DD33015C581DF001EB875 /* NewsRC.h */; };
 		B40DD33315C581DF001EB875 /* NewsRC.m in Sources */ = {isa = PBXBuildFile; fileRef = B40DD33115C581DF001EB875 /* NewsRC.m */; };
+		B42AF92915CC747A008878AE /* NNTPTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92815CC747A008878AE /* NNTPTest.m */; };
+		B42AF92D15CD60CB008878AE /* List.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF92B15CD60CB008878AE /* List.h */; };
+		B42AF92E15CD60CB008878AE /* List.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92C15CD60CB008878AE /* List.m */; };
+		B42AF93515CD7F6D008878AE /* ListTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF93415CD7F6D008878AE /* ListTest.m */; };
 		B434309715C5C047002467FF /* NewsRCTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B434309615C5C047002467FF /* NewsRCTest.m */; };
+		B48DA28215CB1ADC0054F619 /* NNTP.h in Headers */ = {isa = PBXBuildFile; fileRef = B48DA28015CB1ADC0054F619 /* NNTP.h */; };
+		B48DA28315CB1ADC0054F619 /* NNTP.m in Sources */ = {isa = PBXBuildFile; fileRef = B48DA28115CB1ADC0054F619 /* NNTP.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -40,8 +46,16 @@
 		B40DD32315C58180001EB875 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		B40DD33015C581DF001EB875 /* NewsRC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NewsRC.h; sourceTree = "<group>"; };
 		B40DD33115C581DF001EB875 /* NewsRC.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NewsRC.m; sourceTree = "<group>"; };
+		B42AF92715CC747A008878AE /* NNTPTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NNTPTest.h; path = ../libnews/NNTPTest.h; sourceTree = "<group>"; };
+		B42AF92815CC747A008878AE /* NNTPTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = NNTPTest.m; path = ../libnews/NNTPTest.m; sourceTree = "<group>"; };
+		B42AF92B15CD60CB008878AE /* List.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = List.h; sourceTree = "<group>"; };
+		B42AF92C15CD60CB008878AE /* List.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = List.m; sourceTree = "<group>"; };
+		B42AF93315CD7F6D008878AE /* ListTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ListTest.h; sourceTree = "<group>"; };
+		B42AF93415CD7F6D008878AE /* ListTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ListTest.m; sourceTree = "<group>"; };
 		B434309515C5C047002467FF /* NewsRCTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NewsRCTest.h; path = ../libnews/NewsRCTest.h; sourceTree = "<group>"; };
 		B434309615C5C047002467FF /* NewsRCTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = NewsRCTest.m; path = ../libnews/NewsRCTest.m; sourceTree = "<group>"; };
+		B48DA28015CB1ADC0054F619 /* NNTP.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NNTP.h; sourceTree = "<group>"; };
+		B48DA28115CB1ADC0054F619 /* NNTP.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NNTP.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +124,10 @@
 			children = (
 				B40DD33015C581DF001EB875 /* NewsRC.h */,
 				B40DD33115C581DF001EB875 /* NewsRC.m */,
+				B48DA28015CB1ADC0054F619 /* NNTP.h */,
+				B48DA28115CB1ADC0054F619 /* NNTP.m */,
+				B42AF92B15CD60CB008878AE /* List.h */,
+				B42AF92C15CD60CB008878AE /* List.m */,
 				B40DD30E15C58180001EB875 /* Supporting Files */,
 			);
 			path = libnews;
@@ -126,8 +144,12 @@
 		B40DD31F15C58180001EB875 /* libnewsTests */ = {
 			isa = PBXGroup;
 			children = (
+				B42AF93315CD7F6D008878AE /* ListTest.h */,
+				B42AF93415CD7F6D008878AE /* ListTest.m */,
 				B434309515C5C047002467FF /* NewsRCTest.h */,
 				B434309615C5C047002467FF /* NewsRCTest.m */,
+				B42AF92715CC747A008878AE /* NNTPTest.h */,
+				B42AF92815CC747A008878AE /* NNTPTest.m */,
 				B40DD32015C58180001EB875 /* Supporting Files */,
 			);
 			path = libnewsTests;
@@ -150,6 +172,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B40DD33215C581DF001EB875 /* NewsRC.h in Headers */,
+				B48DA28215CB1ADC0054F619 /* NNTP.h in Headers */,
+				B42AF92D15CD60CB008878AE /* List.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -252,6 +276,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B40DD33315C581DF001EB875 /* NewsRC.m in Sources */,
+				B48DA28315CB1ADC0054F619 /* NNTP.m in Sources */,
+				B42AF92E15CD60CB008878AE /* List.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -260,6 +286,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B434309715C5C047002467FF /* NewsRCTest.m in Sources */,
+				B42AF92915CC747A008878AE /* NNTPTest.m in Sources */,
+				B42AF93515CD7F6D008878AE /* ListTest.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
