@@ -9,9 +9,9 @@
 #import <Foundation/Foundation.h>
 
 @protocol DListNode <NSObject>
-@property id<DListNode> prev;
-@property id<DListNode> next;
-@property(retain) id<DListNode> refs;
+@property(assign) id<DListNode> prev;
+@property(assign) id<DListNode> next;
+@property(strong) id<DListNode> refs;
 @end
 
 @interface DList : NSObject <NSFastEnumeration>
