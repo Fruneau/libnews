@@ -112,18 +112,19 @@
     NSUInteger idx;
     NSRange range = { .location = 0, .length = [group->ranges count] };
     
-    idx = [group->ranges indexOfObject:group inSortedRange:range
-        options:NSBinarySearchingFirstEqual
-        usingComparator:^(id obj1, id obj2) {
-            NewsRange *elt = (NewsRange *)obj1;
+    idx = [group->ranges indexOfObject:group
+                         inSortedRange:range
+                               options:NSBinarySearchingFirstEqual
+                       usingComparator:^(id obj1, id obj2) {
+                           NewsRange *elt = (NewsRange *)obj1;
                            
-            if (article < elt->from) {
-                return (NSComparisonResult)NSOrderedDescending;
-            } else if (elt->to < article) {
-                return (NSComparisonResult)NSOrderedAscending;
-            }
-            return (NSComparisonResult)NSOrderedSame;
-        }];
+                           if (article < elt->from) {
+                               return (NSComparisonResult)NSOrderedDescending;
+                           } else if (elt->to < article) {
+                               return (NSComparisonResult)NSOrderedAscending;
+                           }
+                           return (NSComparisonResult)NSOrderedSame;
+                       }];
     return idx != NSNotFound;
 }
 
@@ -139,18 +140,19 @@
         SWAP(from, to);
     }
     
-    idx = [group->ranges indexOfObject:group inSortedRange:range
-        options:NSBinarySearchingInsertionIndex | NSBinarySearchingFirstEqual
-        usingComparator:^(id obj1, id obj2) {
-            NewsRange *elt = (NewsRange *)obj1;
-            
-            if (to + 1 < elt->from) {
-                return (NSComparisonResult)NSOrderedDescending;
-            } else if (from > elt->to + 1) {
-                return (NSComparisonResult)NSOrderedAscending;
-            }
-            return (NSComparisonResult)NSOrderedSame;
-        }];
+    idx = [group->ranges indexOfObject:group
+                         inSortedRange:range
+                               options:NSBinarySearchingInsertionIndex | NSBinarySearchingFirstEqual
+                       usingComparator:^(id obj1, id obj2) {
+                           NewsRange *elt = (NewsRange *)obj1;
+                           
+                           if (to + 1 < elt->from) {
+                               return (NSComparisonResult)NSOrderedDescending;
+                           } else if (from > elt->to + 1) {
+                               return (NSComparisonResult)NSOrderedAscending;
+                           }
+                           return (NSComparisonResult)NSOrderedSame;
+                       }];
     
     if (idx == count) {
         entry = [NewsRange new];
@@ -176,18 +178,19 @@
     
     range.location = idx + 1;
     range.length  -= idx + 1;
-    idx = [group->ranges indexOfObject:group inSortedRange:range
-        options:NSBinarySearchingLastEqual
-        usingComparator:^(id obj1, id obj2) {
-            NewsRange *elt = (NewsRange *)obj1;
-            
-            if (to + 1 >= elt->from) {
-                return (NSComparisonResult)NSOrderedSame;
-            } else if (to < elt->from) {
-                return (NSComparisonResult)NSOrderedDescending;
-            }
-            return (NSComparisonResult)NSOrderedAscending;
-        }];
+    idx = [group->ranges indexOfObject:group
+                         inSortedRange:range
+                               options:NSBinarySearchingLastEqual
+                       usingComparator:^(id obj1, id obj2) {
+                           NewsRange *elt = (NewsRange *)obj1;
+                           
+                           if (to + 1 >= elt->from) {
+                               return (NSComparisonResult)NSOrderedSame;
+                           } else if (to < elt->from) {
+                               return (NSComparisonResult)NSOrderedDescending;
+                           }
+                           return (NSComparisonResult)NSOrderedAscending;
+                       }];
     if (idx != NSNotFound) {
         NewsRange *end = group->ranges[idx];
         
@@ -234,8 +237,10 @@
         return (NSComparisonResult)NSOrderedSame;
     };
     
-    start = [group->ranges indexOfObject:group inSortedRange:range
-        options:NSBinarySearchingFirstEqual usingComparator:cmp];
+    start = [group->ranges indexOfObject:group
+                           inSortedRange:range
+                                 options:NSBinarySearchingFirstEqual
+                         usingComparator:cmp];
     if (start == NSNotFound) {
         return;
     }
@@ -254,8 +259,10 @@
     } else {
         range.location = start + 1;
         range.length  -= start + 1;
-        end = [group->ranges indexOfObject:group inSortedRange:range
-            options:NSBinarySearchingLastEqual usingComparator:cmp];
+        end = [group->ranges indexOfObject:group
+                             inSortedRange:range
+                                   options:NSBinarySearchingLastEqual
+                           usingComparator:cmp];
         if (end == NSNotFound) {
             end = start;
         }
