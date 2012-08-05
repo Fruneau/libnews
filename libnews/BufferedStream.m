@@ -12,17 +12,24 @@
  */
 
 @interface BufferedInputStream : NSInputStream <NSStreamDelegate>
+{
+    id<NSStreamDelegate> _delegate;
+}
+
 @property (strong) NSMutableData *data;
 @property (assign) NSUInteger     skipped;
 @property (strong) NSInputStream *source;
 @property (assign) NSUInteger     maxSize;
 @property (assign) BOOL           inError;
+@property (strong) id<NSStreamDelegate> delegate;
 
 - (id)initFromStream:(NSInputStream *)source maxSize:(NSUInteger)max;
 @end
 
 
 @implementation BufferedInputStream
+@dynamic delegate;
+
 - (id)initFromStream:(NSInputStream *)source maxSize:(NSUInteger)max
 {
     self.source = source;
@@ -34,6 +41,7 @@
 
 - (void)forwardInvocation:(NSInvocation *)anInvocation
 {
+    NSLog(@"%@", anInvocation);
     [anInvocation invokeWithTarget:self.source];
 }
 
@@ -68,7 +76,10 @@
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
-    assert (aStream == self.source);
+    assert (aStream == self.source || aStream == self);
+    if (aStream == self) {
+        return;
+    }
     if (eventCode != NSStreamEventHasBytesAvailable) {
         if (eventCode != NSStreamEventErrorOccurred) {
             self.inError = NO;
@@ -115,6 +126,60 @@
 {
     return self.data.length > self.skipped;
 }
+
+- (void)open
+{
+    [self.source open];
+}
+
+- (void)close
+{
+    [self.source close];
+}
+
+- (void)setDelegate:(id<NSStreamDelegate>)delegate
+{
+    if (delegate == nil) {
+        _delegate = self;
+    } else {
+        _delegate = delegate;
+    }
+}
+
+- (id<NSStreamDelegate>)delegate
+{
+    return _delegate;
+}
+
+- (id)propertyForKey:(NSString *)key
+{
+    return [self.source propertyForKey:key];
+}
+
+- (BOOL)setProperty:(id)property forKey:(NSString *)key
+{
+    return [self.source setProperty:property forKey:key];
+}
+
+- (NSStreamStatus)streamStatus
+{
+    return [self.source streamStatus];
+}
+
+- (NSError *)streamError
+{
+    return [self.source streamError];
+}
+
+- (void)scheduleInRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
+{
+    [self.source scheduleInRunLoop:aRunLoop forMode:mode];
+}
+
+- (void)removeFromRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
+{
+    [self.source removeFromRunLoop:aRunLoop forMode:mode];
+}
 @end
 
 
@@ -122,11 +187,16 @@
  */
 
 @interface BufferedOutputStream : NSOutputStream <NSStreamDelegate>
+{
+    id<NSStreamDelegate> _delegate;
+}
+
 @property (strong) NSMutableData  *data;
 @property (assign) NSUInteger      skipped;
 @property (strong) NSOutputStream *dest;
 @property (assign) NSUInteger      maxSize;
 @property (assign) BOOL            inError;
+@property (strong) id<NSStreamDelegate> delegate;
 
 - (id)initToStream:(NSOutputStream *)dest maxSize:(NSUInteger)max;
 @end
@@ -139,11 +209,6 @@
     self.maxSize = max;
     self.data = [NSMutableData dataWithCapacity:MAX(max, 2u << 20)];
     return self;
-}
-
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    [anInvocation invokeWithTarget:self.dest];
 }
 
 - (void)flushBuffer
@@ -161,7 +226,10 @@
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
-    assert (aStream == self.dest);
+    assert (aStream == self.dest || aStream == self);
+    if (aStream == self) {
+        return;
+    }
     if (eventCode != NSStreamEventHasSpaceAvailable) {
         if (eventCode != NSStreamEventErrorOccurred) {
             self.inError = NO;
@@ -215,6 +283,60 @@
     NSInteger toWrite = MIN(len, self.maxSize - self.data.length);
     [self.data appendBytes:buffer length:toWrite];
     return res + toWrite;
+}
+
+- (void)open
+{
+    [self.dest open];
+}
+
+- (void)close
+{
+    [self.dest close];
+}
+
+- (void)setDelegate:(id<NSStreamDelegate>)delegate
+{
+    if (delegate == nil) {
+        _delegate = self;
+    } else {
+        _delegate = delegate;
+    }
+}
+
+- (id<NSStreamDelegate>)delegate
+{
+    return _delegate;
+}
+
+- (id)propertyForKey:(NSString *)key
+{
+    return [self.dest propertyForKey:key];
+}
+
+- (BOOL)setProperty:(id)property forKey:(NSString *)key
+{
+    return [self.dest setProperty:property forKey:key];
+}
+
+- (NSStreamStatus)streamStatus
+{
+    return [self.dest streamStatus];
+}
+
+- (NSError *)streamError
+{
+    return [self.dest streamError];
+}
+
+- (void)scheduleInRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
+{
+    [self.dest scheduleInRunLoop:aRunLoop forMode:mode];
+}
+
+- (void)removeFromRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
+{
+    [self.dest removeFromRunLoop:aRunLoop forMode:mode];
 }
 @end
 
