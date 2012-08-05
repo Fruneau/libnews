@@ -39,12 +39,6 @@
     return self;
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"%@", anInvocation);
-    [anInvocation invokeWithTarget:self.source];
-}
-
 - (void)fillBuffer
 {
     while (self.data.length - self.skipped < self.maxSize) {
@@ -135,6 +129,8 @@
 - (void)close
 {
     [self.source close];
+    self.skipped = 0;
+    self.data.length = 0;
 }
 
 - (void)setDelegate:(id<NSStreamDelegate>)delegate
@@ -293,6 +289,8 @@
 - (void)close
 {
     [self.dest close];
+    self.skipped = 0;
+    self.data.length = 0;
 }
 
 - (void)setDelegate:(id<NSStreamDelegate>)delegate
