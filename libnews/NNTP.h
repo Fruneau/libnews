@@ -17,8 +17,9 @@ typedef enum NNTPEvent {
 } NNTPEvent;
 
 typedef enum NNTPStatus {
-    NNTPConnected,
     NNTPDisconnected,
+    NNTPConnecting,
+    NNTPConnected,
     NNTPError,
 } NNTPStatus;
 
@@ -33,7 +34,7 @@ typedef enum NNTPStatus {
 /** The NNTP class implements RFC3977: Network News Transfer Protocol
  */
 @interface NNTP : NSObject
-@property           id<NNTPDelegate> delegate;
+@property(strong)   id<NNTPDelegate> delegate;
 @property(readonly) NNTPStatus       status;
 
 + (NNTP *)connectTo:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl;

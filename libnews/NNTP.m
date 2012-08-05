@@ -7,6 +7,7 @@
 //
 
 #import "NNTP.h"
+#import "BufferedStream.h"
 
 
 /** NSRunLoop extensions.
@@ -35,8 +36,6 @@
 @interface NNTP () <NSStreamDelegate>
 @property (strong) NSInputStream  *istream;
 @property (strong) NSOutputStream *ostream;
-@property (assign) NNTPStatus      istreamStatus;
-@property (assign) NNTPStatus      ostreamStatus;
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
 @end
@@ -55,9 +54,10 @@
                                        port, &cfistream, &cfostream);
     self.istream = (NSInputStream *)CFBridgingRelease(cfistream);
     self.ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
-
-    self.istreamStatus = NNTPDisconnected;
-    self.ostreamStatus = NNTPDisconnected;
+    self.istream = [NSInputStream fromStream:self.istream
+                                     maxSize:2u << 20];
+    self.ostream = [NSOutputStream toStream:self.ostream
+                                    maxSize:2u << 20];
     self.istream.delegate = self;
     self.ostream.delegate = self;
     
@@ -74,18 +74,6 @@
     return self;    
 }
 
-- (NNTPStatus)status
-{
-    if (self.istreamStatus == NNTPError || self.ostreamStatus == NNTPError) {
-        return NNTPError;
-    } else if (self.istreamStatus == NNTPConnected
-               && self.ostreamStatus == NNTPConnected)
-    {
-        return NNTPConnected;
-    }
-    return NNTPDisconnected;
-}
-
 - (void)close
 {
     [self.istream close];
@@ -94,19 +82,10 @@
 
 - (void)stream:(NSStream *)stream handleEvent:(NSStreamEvent)eventCode
 {
-    NNTPStatus prevStatus = [self status];
-    
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
             NSLog(@"OpenCompleted");
-            if (stream == self.istream) {
-                self.istreamStatus = NNTPConnected;
-            } else {
-                self.ostreamStatus = NNTPConnected;
-            }
-            if (prevStatus != NNTPConnected && self.status == NNTPConnected) {
-                [self.delegate nntp:self handleEvent:NNTPEventConnected];
-            }
+            [self.delegate nntp:self handleEvent:NNTPEventConnected];
             break;
         case NSStreamEventHasSpaceAvailable:
             NSLog(@"SpaceAvailable");
@@ -118,31 +97,36 @@
             break;
         case NSStreamEventEndEncountered:
             NSLog(@"EndEncountered");
-            if (stream == self.istream) {
-                self.istreamStatus = NNTPDisconnected;
-            } else {
-                self.ostreamStatus = NNTPDisconnected;
-            }
-            if (prevStatus != NNTPDisconnected
-                && self.status == NNTPDisconnected)
-            {
-                [self.delegate nntp:self handleEvent:NNTPEventDisconnected];
-            }
+            [self.delegate nntp:self handleEvent:NNTPEventDisconnected];
             break;
         case NSStreamEventErrorOccurred:
             NSLog(@"ErrorOccured");
-            if (stream == self.istream) {
-                self.istreamStatus = NNTPError;
-            } else {
-                self.ostreamStatus = NNTPError;
-            }
-            if (prevStatus != NNTPError && [self status] == NNTPError) {
-                [self.delegate nntp:self handleEvent:NNTPEventError];
-            }
+            [self.delegate nntp:self handleEvent:NNTPEventError];
             break;
         default:
             break;
     }
+}
+
+- (NNTPStatus)status
+{
+    NSStreamStatus ostatus = self.ostream.streamStatus;
+    NSStreamStatus istatus = self.istream.streamStatus;
+    
+    if (ostatus == NSStreamStatusError || istatus == NSStreamStatusError) {
+        return NNTPError;
+    } else if (ostatus == NSStreamStatusOpening
+               || istatus == NSStreamStatusOpening)
+    {
+        return NNTPConnecting;
+    } else if (ostatus == NSStreamStatusNotOpen
+               || ostatus == NSStreamStatusClosed
+               || istatus == NSStreamStatusClosed
+               || istatus == NSStreamStatusNotOpen)
+    {
+        return NNTPDisconnected;
+    }
+    return NNTPConnected;
 }
 
 + (NNTP *)connectTo:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl
