@@ -13,6 +13,9 @@
 
 @interface NSInputStream (Buffered)
 + (NSInputStream *)fromStream:(NSInputStream *)source maxSize:(NSUInteger)max;
+
+- (NSString *)readLine:(NSUInteger)maxLength;
+- (NSString *)readLine;
 @end
 
 @interface NSOutputStream (Buffered)

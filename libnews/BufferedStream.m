@@ -116,6 +116,35 @@
     return YES;
 }
 
+- (NSString *)readLine:(NSUInteger)maxLength
+{
+    const char *data = (const char *)self.data.mutableBytes + self.skipped;
+    NSUInteger  len  = MIN(maxLength, self.data.length - self.skipped);
+    const char *b = data;
+    
+    if (len == 0) {
+        return nil;
+    }
+    
+    do {
+        b = memchr(b, '\r', len - (b - data) - 1);
+        if (b) {
+            b++;
+        }
+    } while (b && *b != '\n');
+    
+    if (!b) {
+        return nil;
+    }
+
+    NSString *res = [NSString alloc];
+    res = [res initWithBytes:data
+                      length:(b - data) - 1
+                    encoding:NSUTF8StringEncoding];
+    self.skipped += (b - data) + 1;
+    return res;
+}
+
 - (BOOL)hasBytesAvailable
 {
     return self.data.length > self.skipped;
@@ -346,6 +375,17 @@
 + (NSInputStream *)fromStream:(NSInputStream *)source maxSize:(NSUInteger)max
 {
     return [[BufferedInputStream alloc] initFromStream:source maxSize:max];
+}
+
+- (NSString *)readLine:(NSUInteger)maxLength
+{
+    [NSException raise:@"abstract" format:@"you should implement the method"];
+    return nil;
+}
+
+- (NSString *)readLine
+{
+    return [self readLine:1000];
 }
 @end
 
