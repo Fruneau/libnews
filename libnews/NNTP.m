@@ -32,14 +32,18 @@
 /** The NNTP interface implements the Stream delegation
  */
 
-@interface NNTP (Private) < NSStreamDelegate >
+@interface NNTP () <NSStreamDelegate>
+@property (strong) NSInputStream  *istream;
+@property (strong) NSOutputStream *ostream;
+@property (assign) NNTPStatus      istreamStatus;
+@property (assign) NNTPStatus      ostreamStatus;
+
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
 @end
 
 
 @implementation NNTP
 @dynamic status;
-@synthesize delegate;
 
 - (id)initWithHost:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl
 {
@@ -49,33 +53,33 @@
 
     CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)(host),
                                        port, &cfistream, &cfostream);
-    istream = (NSInputStream *)CFBridgingRelease(cfistream);
-    ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
+    self.istream = (NSInputStream *)CFBridgingRelease(cfistream);
+    self.ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
 
-    istreamStatus = NNTPDisconnected;
-    ostreamStatus = NNTPDisconnected;
-    [istream setDelegate:self];
-    [ostream setDelegate:self];
+    self.istreamStatus = NNTPDisconnected;
+    self.ostreamStatus = NNTPDisconnected;
+    self.istream.delegate = self;
+    self.ostream.delegate = self;
     
-    [istream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
-    [ostream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
+    [self.istream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
+    [self.ostream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
     
     if (ssl) {
-        [istream setProperty:NSStreamSocketSecurityLevelNegotiatedSSL
-                      forKey:NSStreamSocketSecurityLevelKey];
+        [self.istream setProperty:NSStreamSocketSecurityLevelNegotiatedSSL
+                           forKey:NSStreamSocketSecurityLevelKey];
     }
     
-    [istream open];
-    [ostream open];
+    [self.istream open];
+    [self.ostream open];
     return self;    
 }
 
 - (NNTPStatus)status
 {
-    if (istreamStatus == NNTPError || ostreamStatus == NNTPError) {
+    if (self.istreamStatus == NNTPError || self.ostreamStatus == NNTPError) {
         return NNTPError;
-    } else if (istreamStatus == NNTPConnected
-               && ostreamStatus == NNTPConnected)
+    } else if (self.istreamStatus == NNTPConnected
+               && self.ostreamStatus == NNTPConnected)
     {
         return NNTPConnected;
     }
@@ -84,8 +88,8 @@
 
 - (void)close
 {
-    [istream close];
-    [ostream close];
+    [self.istream close];
+    [self.ostream close];
 }
 
 - (void)stream:(NSStream *)stream handleEvent:(NSStreamEvent)eventCode
@@ -95,47 +99,45 @@
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
             NSLog(@"OpenCompleted");
-            if (stream == istream) {
-                istreamStatus = NNTPConnected;
+            if (stream == self.istream) {
+                self.istreamStatus = NNTPConnected;
             } else {
-                ostreamStatus = NNTPConnected;
+                self.ostreamStatus = NNTPConnected;
             }
-            if (prevStatus != NNTPConnected
-                && [self status] == NNTPConnected)
-            {
-                [delegate nntp:self handleEvent:NNTPEventConnected];
+            if (prevStatus != NNTPConnected && self.status == NNTPConnected) {
+                [self.delegate nntp:self handleEvent:NNTPEventConnected];
             }
             break;
         case NSStreamEventHasSpaceAvailable:
             NSLog(@"SpaceAvailable");
-            assert (stream == ostream);
+            assert (stream == self.ostream);
             break;
         case NSStreamEventHasBytesAvailable:
             NSLog(@"BytesAvailable");
-            assert (stream == istream);
+            assert (stream == self.istream);
             break;
         case NSStreamEventEndEncountered:
             NSLog(@"EndEncountered");
-            if (stream == istream) {
-                istreamStatus = NNTPDisconnected;
+            if (stream == self.istream) {
+                self.istreamStatus = NNTPDisconnected;
             } else {
-                ostreamStatus = NNTPDisconnected;
+                self.ostreamStatus = NNTPDisconnected;
             }
             if (prevStatus != NNTPDisconnected
-                && [self status] == NNTPDisconnected)
+                && self.status == NNTPDisconnected)
             {
-                [delegate nntp:self handleEvent:NNTPEventDisconnected];
+                [self.delegate nntp:self handleEvent:NNTPEventDisconnected];
             }
             break;
         case NSStreamEventErrorOccurred:
             NSLog(@"ErrorOccured");
-            if (stream == istream) {
-                istreamStatus = NNTPError;
+            if (stream == self.istream) {
+                self.istreamStatus = NNTPError;
             } else {
-                ostreamStatus = NNTPError;
+                self.ostreamStatus = NNTPError;
             }
             if (prevStatus != NNTPError && [self status] == NNTPError) {
-                [delegate nntp:self handleEvent:NNTPEventError];
+                [self.delegate nntp:self handleEvent:NNTPEventError];
             }
             break;
         default:

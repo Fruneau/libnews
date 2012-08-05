@@ -24,7 +24,6 @@
 - (BOOL)isHead:(id<DListNode>)node;
 - (BOOL)isTail:(id<DListNode>)node;
 
-
 - (void)addHead:(id<DListNode>)node;
 - (void)addTail:(id<DListNode>)node;
 - (void)add:(id<DListNode>)node before:(id<DListNode>)otherNode;

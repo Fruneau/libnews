@@ -33,14 +33,6 @@ typedef enum NNTPStatus {
 /** The NNTP class implements RFC3977: Network News Transfer Protocol
  */
 @interface NNTP : NSObject
-{
-    @private
-    NSInputStream *istream;
-    NSOutputStream *ostream;
-    NNTPStatus istreamStatus;
-    NNTPStatus ostreamStatus;
-}
-
 @property           id<NNTPDelegate> delegate;
 @property(readonly) NNTPStatus       status;
 

@@ -9,13 +9,6 @@
 #import <Foundation/Foundation.h>
 
 @interface NewsRC : NSObject
-{
-    @private
-    NSMutableDictionary *groups;
-}
-
-- (id)init;
-
 - (BOOL)subscribe:(NSString *)group;
 - (BOOL)unsubscribe:(NSString *)group;
 - (BOOL)isSubcribed:(NSString *)group;

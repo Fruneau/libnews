@@ -12,31 +12,31 @@
 
 static void setNextNode(id<DListNode> node, id<DListNode> next)
 {
-    [node setNext:next];
+    node.next = next;
     if (next == nil || [next isMemberOfClass:[DList class]]) {
-        [node setRefs:nil];
+        node.refs = nil;
     } else {
-        [node setRefs:next];
+        node.refs = next;
     }
 }
 
 static void addNode(id<DListNode> node, id<DListNode> prev, id<DListNode> next)
 {
-    [next setPrev:node];
+    next.prev = node;
     setNextNode(node, next);
-    [node setPrev:prev];
+    node.prev = prev;
     setNextNode(prev, node);
 }
 
 static void removeNode(id<DListNode> prev, id<DListNode> next)
 {
     setNextNode(prev, next);
-    [prev setNext:next];
+    prev.next = next;
 }
 
 static void detachNode(id<DListNode> node)
 {
-    [node setPrev:nil];
+    node.prev = nil;
     setNextNode(node, nil);
 }
 
@@ -44,45 +44,43 @@ static void detachNode(id<DListNode> node)
 /* Interfaces */
 
 @interface DListEnumerator : NSEnumerator
-{
-    @private
-    DList         *list;
-    id<DListNode>  next;
-    BOOL           reverse;
-}
+@property (assign) DList *list;
+@property (assign) id<DListNode> next;
+@property (assign) BOOL reverse;
+
 - (id)initWithDList:(DList *)dlist reverse:(BOOL)reverse;
 @end
 
-@interface DList (Private) <DListNode>
+@interface DList () <DListNode>
 @end
 
 
 /* Implementations */
 
 @implementation DListEnumerator
--(id)initWithDList:(DList *)dlist reverse:(BOOL)dreverse
+-(id)initWithDList:(DList *)list reverse:(BOOL)reverse
 {
-    list    = dlist;
-    reverse = dreverse;
+    self.list    = list;
+    self.reverse = reverse;
     if (reverse) {
-        next = [list prev];
+        self.next = list.prev;
     } else {
-        next = [list next];
+        self.next = list.next;
     }
     return self;
 }
 
 - (id)nextObject
 {
-    id<DListNode> current = next;
+    id<DListNode> current = self.next;
 
-    if (current == list) {
+    if (current == self.list) {
         return nil;
     }
-    if (reverse) {
-        next = [current prev];
+    if (self.reverse) {
+        self.next = current.prev;
     } else {
-        next = [current next];
+        self.next = current.next;
     }
     return current;
 }
@@ -98,24 +96,23 @@ static void detachNode(id<DListNode> node)
 
 - (id)init
 {
-    prev = next = self;
-    refs = nil;
+    self.prev = self.next = self;
     return self;
 }
 
 - (BOOL)isEmpty
 {
-    return next == self;
+    return self.next == self;
 }
 
 - (BOOL)isSingular
 {
-    return next != self && prev == next;
+    return self.next != self && self.prev == self.next;
 }
 
 - (BOOL)isEmptyOrSingular
 {
-    return prev == next;
+    return self.prev == self.next;
 }
 
 - (id<DListNode>)head
@@ -123,7 +120,7 @@ static void detachNode(id<DListNode> node)
     if ([self isEmpty]) {
         return nil;
     }
-    return next;
+    return self.next;
 }
 
 - (id<DListNode>)tail
@@ -131,42 +128,42 @@ static void detachNode(id<DListNode> node)
     if ([self isEmpty]) {
         return nil;
     }
-    return prev;
+    return self.prev;
 }
 
 - (BOOL)isHead:(id<DListNode>)node
 {
-    return node == next;
+    return node == self.next;
 }
 
 - (BOOL)isTail:(id<DListNode>)node
 {
-    return node == prev;
+    return node == self.prev;
 }
 
 - (void)addHead:(id<DListNode>)node
 {
-    addNode(node, self, next);
+    addNode(node, self, self.next);
 }
 
 - (void)addTail:(id<DListNode>)node
 {
-    addNode(node, prev, self);
+    addNode(node, self.prev, self);
 }
 
 - (void)add:(id<DListNode>)node before:(id<DListNode>)otherNode
 {
-    addNode(node, [otherNode prev], otherNode);
+    addNode(node, otherNode.prev, otherNode);
 }
 
 - (void)add:(id<DListNode>)node after:(id<DListNode>)otherNode
 {
-    addNode(node, otherNode, [otherNode next]);
+    addNode(node, otherNode, otherNode.next);
 }
 
 - (void)moveToHead:(id<DListNode>)node
 {
-    if (node == next) {
+    if (node == self.next) {
         return;
     }
     [self remove:node];
@@ -175,7 +172,7 @@ static void detachNode(id<DListNode> node)
 
 - (void)moveToTail:(id<DListNode>)node
 {
-    if (node == prev) {
+    if (node == self.prev) {
         return;
     }
     [self remove:node];
@@ -184,7 +181,7 @@ static void detachNode(id<DListNode> node)
 
 - (id<DListNode>)popHead
 {
-    id<DListNode> node = next;
+    id<DListNode> node = self.next;
     
     if (node == self) {
         return nil;
@@ -196,7 +193,7 @@ static void detachNode(id<DListNode> node)
 
 - (id<DListNode>)popTail
 {
-    id<DListNode> node = prev;
+    id<DListNode> node = self.prev;
     
     if (node == self) {
         return nil;
@@ -208,7 +205,7 @@ static void detachNode(id<DListNode> node)
 
 - (id<DListNode>)remove:(id<DListNode>)node
 {
-    removeNode([node prev], [node next]);
+    removeNode(node.prev, node.next);
     detachNode(node);
     return node;
 }
@@ -235,7 +232,7 @@ static void detachNode(id<DListNode> node)
         state->state        = 1;
         state->itemsPtr     = buffer;
         state->mutationsPtr = &state->extra[0];
-        node = next;
+        node = self.next;
     } else {
         assert (state->state == 1);
         assert (state->itemsPtr == buffer);
@@ -245,7 +242,7 @@ static void detachNode(id<DListNode> node)
     assert (len > 0);
     while (res < len && node != self) {
         buffer[res++] = node;
-        node = [node next];
+        node = node.next;
     }
     buffer[len] = node;
     return res;
