@@ -13,55 +13,51 @@
 
 @interface BufferedInputStream : NSInputStream <NSStreamDelegate>
 {
+    NSMutableData       *_data;
+    NSUInteger           _skipped;
+    NSInputStream       *_source;
+    NSUInteger           _maxSize;
+    BOOL                 _inError;
     id<NSStreamDelegate> _delegate;
 }
-
-@property (strong) NSMutableData *data;
-@property (assign) NSUInteger     skipped;
-@property (strong) NSInputStream *source;
-@property (assign) NSUInteger     maxSize;
-@property (assign) BOOL           inError;
-@property (strong) id<NSStreamDelegate> delegate;
 
 - (id)initFromStream:(NSInputStream *)source maxSize:(NSUInteger)max;
 @end
 
 
 @implementation BufferedInputStream
-@dynamic delegate;
-
 - (id)initFromStream:(NSInputStream *)source maxSize:(NSUInteger)max
 {
-    self.source = source;
-    self.source.delegate = self;
-    self.maxSize = max;
-    self.data    = [NSMutableData dataWithCapacity:MIN(max, 2u << 20)];
+    _source = source;
+    _source.delegate = self;
+    _maxSize = max;
+    _data    = [NSMutableData dataWithCapacity:MIN(max, 2u << 20)];
     return self;
 }
 
 - (void)fillBuffer
 {
-    while (self.data.length - self.skipped < self.maxSize) {
+    while (_data.length - _skipped < _maxSize) {
         uint8_t *bytes;
-        NSUInteger remain = self.skipped;
+        NSUInteger remain = _skipped;
         NSInteger  res;
         
         if (remain) {
-            bytes = self.data.mutableBytes;
-            memmove(bytes, bytes + remain, self.data.length - remain);
-            self.skipped = 0;
+            bytes = _data.mutableBytes;
+            memmove(bytes, bytes + remain, _data.length - remain);
+            _skipped = 0;
         } else {
-            remain = MIN(4u << 10, self.maxSize - self.data.length);
-            self.data.length += remain;
-            bytes = self.data.mutableBytes;
+            remain = MIN(4u << 10, _maxSize - _data.length);
+            _data.length += remain;
+            bytes = _data.mutableBytes;
         }
         
-        bytes += self.data.length - remain;
-        res = [self.source read:bytes maxLength:remain];
-        self.data.length -= (remain + MAX(res, 0));
-        if (res <= 0) {
+        bytes += _data.length - remain;
+        res = [_source read:bytes maxLength:remain];
+        _data.length -= (remain - MAX(res, 0));
+        if (res <= (NSInteger)remain || ![_source hasBytesAvailable]) {
             if (res < 0) {
-                self.inError = YES;
+                _inError = YES;
             }
             return;
         }
@@ -70,56 +66,56 @@
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
-    assert (aStream == self.source || aStream == self);
+    assert (aStream == _source || aStream == self);
     if (aStream == self) {
         return;
     }
     if (eventCode != NSStreamEventHasBytesAvailable) {
         if (eventCode != NSStreamEventErrorOccurred) {
-            self.inError = NO;
+            _inError = NO;
         }
-        [self.delegate stream:self handleEvent:eventCode];
+        [_delegate stream:self handleEvent:eventCode];
         return;
     }
     
-    NSUInteger oldLength = self.data.length - self.skipped;
+    NSUInteger oldLength = _data.length - _skipped;
     [self fillBuffer];
-    if (oldLength == 0 && self.data.length != self.skipped) {
-        [self.delegate stream:self handleEvent:eventCode];
+    if (oldLength == 0 && _data.length != _skipped) {
+        [_delegate stream:self handleEvent:eventCode];
     }
 }
 
 - (NSInteger)read:(uint8_t *)buffer maxLength:(NSUInteger)len
 {
     NSRange range = {
-        .location = self.skipped,
-        .length   = MIN(len, self.data.length - self.skipped)
+        .location = _skipped,
+        .length   = MIN(len, _data.length - _skipped)
     };
     
     if (range.length == 0) {
-        if (self.inError) {
+        if (_inError) {
             return -1;
         }
         return 0;
     }
-    [self.data getBytes:buffer range:range];
-    self.skipped += range.length;
+    [_data getBytes:buffer range:range];
+    _skipped += range.length;
     return range.length;
 }
 
 - (BOOL)getBuffer:(uint8_t **)buffer length:(NSUInteger *)len
 {
-    *buffer = (uint8_t *)self.data.mutableBytes + self.skipped;
-    *len    = self.data.length - self.skipped;
-    self.skipped = self.data.length;
+    *buffer = (uint8_t *)_data.mutableBytes + _skipped;
+    *len    = _data.length - _skipped;
+    _skipped = _data.length;
     
     return YES;
 }
 
 - (NSString *)readLine:(NSUInteger)maxLength
 {
-    const char *data = (const char *)self.data.mutableBytes + self.skipped;
-    NSUInteger  len  = MIN(maxLength, self.data.length - self.skipped);
+    const char *data = (const char *)_data.mutableBytes + _skipped;
+    NSUInteger  len  = MIN(maxLength, _data.length - _skipped);
     const char *b = data;
     
     if (len == 0) {
@@ -141,25 +137,25 @@
     res = [res initWithBytes:data
                       length:(b - data) - 1
                     encoding:NSUTF8StringEncoding];
-    self.skipped += (b - data) + 1;
+    _skipped += (b - data) + 1;
     return res;
 }
 
 - (BOOL)hasBytesAvailable
 {
-    return self.data.length > self.skipped;
+    return _data.length > _skipped;
 }
 
 - (void)open
 {
-    [self.source open];
+    [_source open];
 }
 
 - (void)close
 {
-    [self.source close];
-    self.skipped = 0;
-    self.data.length = 0;
+    [_source close];
+    _skipped = 0;
+    _data.length = 0;
 }
 
 - (void)setDelegate:(id<NSStreamDelegate>)delegate
@@ -178,32 +174,32 @@
 
 - (id)propertyForKey:(NSString *)key
 {
-    return [self.source propertyForKey:key];
+    return [_source propertyForKey:key];
 }
 
 - (BOOL)setProperty:(id)property forKey:(NSString *)key
 {
-    return [self.source setProperty:property forKey:key];
+    return [_source setProperty:property forKey:key];
 }
 
 - (NSStreamStatus)streamStatus
 {
-    return [self.source streamStatus];
+    return [_source streamStatus];
 }
 
 - (NSError *)streamError
 {
-    return [self.source streamError];
+    return [_source streamError];
 }
 
 - (void)scheduleInRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
 {
-    [self.source scheduleInRunLoop:aRunLoop forMode:mode];
+    [_source scheduleInRunLoop:aRunLoop forMode:mode];
 }
 
 - (void)removeFromRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
 {
-    [self.source removeFromRunLoop:aRunLoop forMode:mode];
+    [_source removeFromRunLoop:aRunLoop forMode:mode];
 }
 @end
 
@@ -214,14 +210,12 @@
 @interface BufferedOutputStream : NSOutputStream <NSStreamDelegate>
 {
     id<NSStreamDelegate> _delegate;
+    NSMutableData       *_data;
+    NSUInteger           _skipped;
+    NSOutputStream      *_dest;
+    NSUInteger           _maxSize;
+    BOOL                 _inError;
 }
-
-@property (strong) NSMutableData  *data;
-@property (assign) NSUInteger      skipped;
-@property (strong) NSOutputStream *dest;
-@property (assign) NSUInteger      maxSize;
-@property (assign) BOOL            inError;
-@property (strong) id<NSStreamDelegate> delegate;
 
 - (id)initToStream:(NSOutputStream *)dest maxSize:(NSUInteger)max;
 @end
@@ -229,74 +223,82 @@
 @implementation BufferedOutputStream
 - (id)initToStream:(NSOutputStream *)dest maxSize:(NSUInteger)max
 {
-    self.dest = dest;
-    self.dest.delegate = self;
-    self.maxSize = max;
-    self.data = [NSMutableData dataWithCapacity:MAX(max, 2u << 20)];
+    _dest = dest;
+    _dest.delegate = self;
+    _maxSize = max;
+    _data = [NSMutableData dataWithCapacity:MAX(max, 2u << 20)];
     return self;
 }
 
 - (void)flushBuffer
 {
-    uint8_t *buffer = (uint8_t *)self.data.mutableBytes + self.skipped;
-    NSUInteger len  = self.data.length - self.skipped;
-    NSInteger res   = [self.dest write:buffer  maxLength:len];
+    uint8_t *buffer = (uint8_t *)_data.mutableBytes + _skipped;
+    NSUInteger len  = _data.length - _skipped;
+    NSInteger res   = [_dest write:buffer  maxLength:len];
     
     if (res < 0) {
-        self.inError = YES;
+        _inError = YES;
         return;
     }
-    self.skipped += res;
+    _skipped += res;
 }
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode
 {
-    assert (aStream == self.dest || aStream == self);
+    assert (aStream == _dest || aStream == self);
     if (aStream == self) {
         return;
     }
     if (eventCode != NSStreamEventHasSpaceAvailable) {
         if (eventCode != NSStreamEventErrorOccurred) {
-            self.inError = NO;
+            _inError = NO;
         }
-        [self.delegate stream:self handleEvent:eventCode];
+        [_delegate stream:self handleEvent:eventCode];
         return;
     }
 
     [self flushBuffer];
-    if (!self.inError && self.data.length == 0) {
-        if ([self.dest hasSpaceAvailable]) {
-            [self.delegate stream:self handleEvent:eventCode];
+    if (!_inError && _data.length == 0) {
+        if ([_dest hasSpaceAvailable]) {
+            [_delegate stream:self handleEvent:eventCode];
         }
     }
 }
 
 - (BOOL)hasSpaceAvailable
 {
-    return self.data.length - self.skipped < self.maxSize
-        || self.dest.hasSpaceAvailable;
+    if (_inError) {
+        return NO;
+    }
+    return _data.length - _skipped < _maxSize
+        || _dest.hasSpaceAvailable;
+}
+
+- (BOOL)hasCapacityAvailable:(NSUInteger)length
+{
+    return !_inError && _data.length - _skipped >= length;
 }
 
 - (NSInteger)write:(const uint8_t *)buffer maxLength:(NSUInteger)len
 {
-    if (self.inError) {
+    if (_inError) {
         return -1;
     }
-    if ([self.dest hasSpaceAvailable]) {
+    if ([_dest hasSpaceAvailable]) {
         [self flushBuffer];
     }
-    if (self.inError) {
+    if (_inError) {
         return -1;
     }
     
-    if (self.skipped) {
-        uint8_t *bytes = self.data.mutableBytes;
-        memmove(bytes, bytes + self.skipped, self.data.length - self.skipped);
-        self.data.length -= self.skipped;
-        self.skipped = 0;
+    if (_skipped) {
+        uint8_t *bytes = _data.mutableBytes;
+        memmove(bytes, bytes + _skipped, _data.length - _skipped);
+        _data.length -= _skipped;
+        _skipped = 0;
     }
 
-    NSInteger res = [self.dest write:buffer maxLength:len];
+    NSInteger res = [_dest write:buffer maxLength:len];
     if (res < 0) {
         return res;
     } else if (res == (NSInteger)len) {
@@ -305,21 +307,21 @@
     buffer += res;
     len -= res;
     
-    NSInteger toWrite = MIN(len, self.maxSize - self.data.length);
-    [self.data appendBytes:buffer length:toWrite];
+    NSInteger toWrite = MIN(len, _maxSize - _data.length);
+    [_data appendBytes:buffer length:toWrite];
     return res + toWrite;
 }
 
 - (void)open
 {
-    [self.dest open];
+    [_dest open];
 }
 
 - (void)close
 {
-    [self.dest close];
-    self.skipped = 0;
-    self.data.length = 0;
+    [_dest close];
+    _skipped = 0;
+    _data.length = 0;
 }
 
 - (void)setDelegate:(id<NSStreamDelegate>)delegate
@@ -338,32 +340,32 @@
 
 - (id)propertyForKey:(NSString *)key
 {
-    return [self.dest propertyForKey:key];
+    return [_dest propertyForKey:key];
 }
 
 - (BOOL)setProperty:(id)property forKey:(NSString *)key
 {
-    return [self.dest setProperty:property forKey:key];
+    return [_dest setProperty:property forKey:key];
 }
 
 - (NSStreamStatus)streamStatus
 {
-    return [self.dest streamStatus];
+    return [_dest streamStatus];
 }
 
 - (NSError *)streamError
 {
-    return [self.dest streamError];
+    return [_dest streamError];
 }
 
 - (void)scheduleInRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
 {
-    [self.dest scheduleInRunLoop:aRunLoop forMode:mode];
+    [_dest scheduleInRunLoop:aRunLoop forMode:mode];
 }
 
 - (void)removeFromRunLoop:(NSRunLoop *)aRunLoop forMode:(NSString *)mode
 {
-    [self.dest removeFromRunLoop:aRunLoop forMode:mode];
+    [_dest removeFromRunLoop:aRunLoop forMode:mode];
 }
 @end
 
@@ -394,5 +396,13 @@
 + (NSOutputStream *)toStream:(NSOutputStream *)dest maxSize:(NSUInteger)max
 {
     return [[BufferedOutputStream alloc] initToStream:dest maxSize:max];
+}
+
+- (BOOL)hasCapacityAvailable:(NSUInteger)length
+{
+    if (length == 1 && [self hasSpaceAvailable]) {
+        return YES;
+    }
+    return NO;
 }
 @end

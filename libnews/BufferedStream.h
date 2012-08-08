@@ -20,4 +20,6 @@
 
 @interface NSOutputStream (Buffered)
 + (NSOutputStream *)toStream:(NSOutputStream *)dest maxSize:(NSUInteger)max;
+
+- (BOOL)hasCapacityAvailable:(NSUInteger)length;
 @end
