@@ -12,12 +12,13 @@
 @implementation NNTPTest
 - (void)testConnect
 {
-    NNTP *nntp = [NNTP connectSyncTo:@"news.intersec.com"
-                                port:563
-                                 ssl:YES
-                          beforeDate:[NSDate dateWithTimeIntervalSinceNow:10]];
+    NNTP *nntp = [NNTP new];
+    [nntp setSync:10];
+    [nntp connect:@"news.intersec.com" port:563 ssl:YES];
 
-    STAssertNotNil(nntp, @"");
+    STAssertEquals([nntp status], NNTPConnected, @"cannot connect");
+    [nntp close];
+    
 }
 
 @end
