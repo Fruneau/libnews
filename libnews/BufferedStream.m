@@ -77,10 +77,10 @@
         [_delegate stream:self handleEvent:eventCode];
         return;
     }
-    
+
     NSUInteger oldLength = _data.length - _skipped;
     [self fillBuffer];
-    if (oldLength == 0 && _data.length != _skipped) {
+    if (_data.length - _skipped > oldLength) {
         [_delegate stream:self handleEvent:eventCode];
     }
 }
@@ -232,11 +232,16 @@
 
 - (void)flushBuffer
 {
-    uint8_t *buffer = (uint8_t *)_data.mutableBytes + _skipped;
     NSUInteger len  = _data.length - _skipped;
+    if (len == 0 || ![_dest hasSpaceAvailable]) {
+        return;
+    }
+
+    uint8_t *buffer = (uint8_t *)_data.mutableBytes + _skipped;
     NSInteger res   = [_dest write:buffer  maxLength:len];
-    
+
     if (res < 0) {
+        NSLog(@"network error: %@", _dest.streamError);
         _inError = YES;
         return;
     }
@@ -258,10 +263,8 @@
     }
 
     [self flushBuffer];
-    if (!_inError && _data.length == 0) {
-        if ([_dest hasSpaceAvailable]) {
-            [_delegate stream:self handleEvent:eventCode];
-        }
+    if (!_inError && _data.length < _maxSize) {
+        [_delegate stream:self handleEvent:eventCode];
     }
 }
 
@@ -276,40 +279,54 @@
 
 - (BOOL)hasCapacityAvailable:(NSUInteger)length
 {
-    return !_inError && _data.length - _skipped >= length;
+    return !_inError && _maxSize - _data.length + _skipped >= length;
 }
 
 - (NSInteger)write:(const uint8_t *)buffer maxLength:(NSUInteger)len
 {
-    if (_inError) {
-        return -1;
-    }
-    if ([_dest hasSpaceAvailable]) {
-        [self flushBuffer];
+    if (len == 0) {
+        return 0;
     }
     if (_inError) {
         return -1;
     }
     
-    if (_skipped) {
+    if (![self hasCapacityAvailable:len]) {
+        [self flushBuffer];
+        if (_inError) {
+            return -1;
+        }
+    }
+    
+    NSInteger written = 0;
+    if (_data.length == _skipped) {
+        written = [_dest write:buffer maxLength:len];
+        if (written < 0) {
+            NSLog(@"network error: %@", _dest.streamError);
+            _inError = YES;
+            return written;
+        } else if (written == (NSInteger)len) {
+            return len;
+        }
+        buffer += written;
+        len    -= written;
+    }
+    
+    if (_skipped && _maxSize - _data.length - _skipped < len) {
         uint8_t *bytes = _data.mutableBytes;
         memmove(bytes, bytes + _skipped, _data.length - _skipped);
         _data.length -= _skipped;
         _skipped = 0;
     }
-
-    NSInteger res = [_dest write:buffer maxLength:len];
-    if (res < 0) {
-        return res;
-    } else if (res == (NSInteger)len) {
-        return len;
-    }
-    buffer += res;
-    len -= res;
     
-    NSInteger toWrite = MIN(len, _maxSize - _data.length);
-    [_data appendBytes:buffer length:toWrite];
-    return res + toWrite;
+    NSInteger buffered = MIN(len, _maxSize - _data.length - _skipped);
+    [_data appendBytes:buffer length:buffered];
+
+    [self flushBuffer];
+    if (_inError) {
+        return -1;
+    }
+    return written + buffered;
 }
 
 - (void)open
