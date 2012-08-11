@@ -33,7 +33,7 @@ typedef enum NNTPStatus {
 @property(strong)   id<NNTPDelegate> delegate;
 @property(readonly) NNTPStatus       status;
 
-- (void)setSync:(UInt32)timeout;
+- (void)setSync:(NSInteger)timeout;
 - (void)setAsync;
 
 - (void)connect:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl;

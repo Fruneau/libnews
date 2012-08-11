@@ -35,17 +35,23 @@
  */
 
 @interface NNTPCommand : NSObject <DListNode>
-@property (strong) NSString *command;
-@property (assign) BOOL isMultiline;
-@property (assign) BOOL sent;
-@property (assign) BOOL done;
-@property (assign) BOOL pipelinable;
-
-@property (assign) NSUInteger replyCode;
-@property (strong) NSString  *replyMessage;
+{
+    @public
+    NSString  *_command;
+    NSArray   *_validCodes;
+    
+    BOOL       _acceptUnknownCodes;
+    BOOL       _sent;
+    BOOL       _gotHeader;
+    BOOL       _done;
+    BOOL       _pipelinable;
+    
+    void (^_on_header)(NSUInteger code, NSString *message);
+    void (^_on_line)(NSString *line);
+}
 
 - (BOOL)send:(NSOutputStream *)stream;
-- (BOOL)readLine:(NSString *)line;
+- (void)readLine:(NSString *)line;
 @end
 
 @implementation NNTPCommand
@@ -55,27 +61,27 @@
 
 - (BOOL)send:(NSOutputStream *)ostream
 {
-    if (!self.sent && [ostream hasCapacityAvailable:self.command.length + 2]) {
-        [ostream write:(const uint8_t *)[self.command UTF8String]
-             maxLength:self.command.length];
-        [ostream write:(const uint8_t *)"\r\n"
-             maxLength:2];
-        self.sent = YES;
+    if (!_sent && [ostream hasCapacityAvailable:_command.length]) {
+        NSLog(@"<< %@", [_command substringToIndex:_command.length - 2]);
+        [ostream write:(const uint8_t *)[_command UTF8String]
+             maxLength:_command.length];
+        _sent = YES;
         return YES;
     }
     return NO;
 }
 
-- (BOOL)readLine:(NSString *)line
+- (void)readLine:(NSString *)line
 {
-    if (self.replyCode == 0) {
+    if (!_gotHeader) {
         if (line.length < 5) {
             [NSException raise:@"invalid reply"
                         format:@"excepted \"code reply\", got \"%@\"", line];
         }
+        _gotHeader = YES;
         
-        NSString *code = [line substringToIndex:3];
         int icode;
+        NSString *code = [line substringToIndex:3];
         NSScanner *scanner = [NSScanner scannerWithString:code];
         
         if (![scanner scanInt:&icode] || ![scanner isAtEnd] || icode < 0
@@ -84,16 +90,44 @@
             [NSException raise:@"invalid reply"
                         format:@"invalid reply code %@", line];
         }
-        
-        self.replyCode    = icode;
-        self.replyMessage = [line substringFromIndex:4];
+
+        if (!_on_line) {
+            _done = YES;
+        }
+        line = [line substringFromIndex:4];
+        for (NSNumber *number in _validCodes) {
+            if ([number intValue] == icode) {
+                if (_on_header) {
+                    _on_header(icode, line);
+                }
+                return;
+            }
+        }
+        if (!_acceptUnknownCodes) {
+            [NSException raise:@"invalid reply"
+                        format:@"code %i not accepted by this command %@",
+             icode, self];
+        }
+        return;
+    } else {
+        if (!_on_line) {
+            [NSException raise:@"unexpected line"
+                        format:@"received data on non-multiline command"];
+        }
+
+        if ([line isEqualToString:@"."]) {
+            _done = YES;
+        } else if ([line characterAtIndex:0] == '.') {
+            _on_line([line substringFromIndex:1]);
+        } else {
+            _on_line(line);
+        }
     }
-    
-    if (!self.isMultiline || [line isEqualToString:@"."]) {
-        self.done = YES;
-        return YES;
-    }
-    return NO;
+}
+
+- (NSString *)description
+{
+    return _command;
 }
 @end
 
@@ -101,10 +135,19 @@
  */
 
 @interface NNTP () <NSStreamDelegate>
-@property (strong) NSInputStream  *istream;
-@property (strong) NSOutputStream *ostream;
-@property (strong) DList *commands;
-@property (assign) NSUInteger syncTimeout;
+{
+    NSInputStream  *_istream;
+    NSOutputStream *_ostream;
+    DList          *_commands;
+    NSInteger       _syncTimeout;
+    
+    int             _nntpVersion;
+    NSString       *_implementation;
+    struct {
+        unsigned     modeReader : 1;
+        unsigned     reader     : 1;
+    } _capabilities;
+}
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
 @end
@@ -115,27 +158,27 @@
 
 - (id)init
 {
-    self.commands = [DList new];
+    _commands = [DList new];
     return self;
 }
 
-- (void)setSync:(UInt32)timeout
+- (void)setSync:(NSInteger)timeout
 {
-    self.syncTimeout = timeout;
+    _syncTimeout = timeout;
 }
 
 - (void)setAsync
 {
-    self.syncTimeout = 0;
+    _syncTimeout = 0;
 }
 
 - (void)waitForCondition:(bool (^)(void))condition
 {
-    if (!self.syncTimeout) {
+    if (!_syncTimeout) {
         return;
     }
 
-    NSDate *date = [NSDate dateWithTimeIntervalSinceNow:self.syncTimeout];
+    NSDate *date = [NSDate dateWithTimeIntervalSinceNow:_syncTimeout];
     [[NSRunLoop currentRunLoop] runUntilDate:date orCondition:condition];
     
     if (!condition()) {
@@ -143,73 +186,143 @@
     }
 }
 
+- (void)refreshCapabilities
+{
+    _nntpVersion    = 0;
+    _implementation = nil;
+    bzero(&_capabilities, sizeof(_capabilities));
+
+    NNTPCommand *command = [NNTPCommand new];
+    command->_command      = @"CAPABILITIES\r\n";
+    command->_validCodes   = @[ @101 ];
+    command->_sent         = NO;
+    command->_pipelinable  = NO;
+    command->_done         = NO;
+    command->_on_line = ^(NSString *line) {
+        NSCharacterSet *space;
+        NSScanner *scanner = [NSScanner scannerWithString:line];
+        NSString  * __autoreleasing capability;
+        
+        space = [NSCharacterSet characterSetWithCharactersInString:@" "];
+        [scanner scanUpToCharactersFromSet:space intoString:&capability];
+        [scanner scanCharactersFromSet:space intoString:NULL];
+        
+        if (_nntpVersion == 0) {
+            if ([capability caseInsensitiveCompare:@"VERSION"]) {
+                [NSException raise:@"invalid reply"
+                            format:@"expected VERSION as the first capability,"
+                 "got %@", line];
+            }
+            if (![scanner scanInt:&_nntpVersion]) {
+                [NSException raise:@"invalid reply"
+                            format:@"expected version number in %@", line];
+            }
+        } else if (![capability caseInsensitiveCompare:@"MODE-READER"]) {
+            _capabilities.modeReader = YES;
+        } else if (![capability caseInsensitiveCompare:@"READER"]) {
+            _capabilities.reader = YES;
+        } else if (![capability caseInsensitiveCompare:@"IMPLEMENTATION"]) {
+            _implementation = [line substringFromIndex:[scanner scanLocation]];
+        } else {
+            NSLog(@"unsupported capability: %@", line);
+        }
+    };
+    [self sendCommand:command];
+}
+
 - (void)connect:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl
 {
-    [self close];
-    
     CFReadStreamRef cfistream;
     CFWriteStreamRef cfostream;
     NSRunLoop *loop = [NSRunLoop currentRunLoop];
 
     CFStreamCreatePairWithSocketToHost(NULL, (__bridge CFStringRef)(host),
                                        port, &cfistream, &cfostream);
-    self.istream = (NSInputStream *)CFBridgingRelease(cfistream);
-    self.ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
-    self.istream = [NSInputStream fromStream:self.istream
+    _istream = (NSInputStream *)CFBridgingRelease(cfistream);
+    _ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
+    _istream = [NSInputStream fromStream:_istream
                                      maxSize:2u << 20];
-    self.ostream = [NSOutputStream toStream:self.ostream
+    _ostream = [NSOutputStream toStream:_ostream
                                     maxSize:2u << 20];
-    self.istream.delegate = self;
-    self.ostream.delegate = self;
+    _istream.delegate = self;
+    _ostream.delegate = self;
     
-    [self.istream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
-    [self.ostream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
+    [_istream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
+    [_ostream scheduleInRunLoop:loop forMode:NSDefaultRunLoopMode];
     
     if (ssl) {
-        [self.istream setProperty:NSStreamSocketSecurityLevelNegotiatedSSL
-                           forKey:NSStreamSocketSecurityLevelKey];
+        [_istream setProperty:NSStreamSocketSecurityLevelNegotiatedSSL
+                       forKey:NSStreamSocketSecurityLevelKey];
     }
     
-    [self.istream open];
-    [self.ostream open];
+    [_istream open];
+    [_ostream open];
     
     NNTPCommand *command = [NNTPCommand new];
-    command.sent         = YES;
-    command.isMultiline  = NO;
-    command.pipelinable  = NO;
-    command.done         = NO;
+    command->_validCodes   = @[ @200, @201, @400, @502 ];
+    command->_sent         = YES;
+    command->_pipelinable  = NO;
+    command->_done         = NO;
     [self sendCommand:command];
+    
+    [self refreshCapabilities];
+        
+    if (!_capabilities.reader && !_capabilities.modeReader) {
+        [self close];
+        [NSException raise:@"invalid server"
+                    format:@"cannot post on that server"];
+    } else if (!_capabilities.reader) {
+        command = [NNTPCommand new];
+        command->_command     = @"MODE READER\r\n";
+        command->_validCodes  = @[ @200, @201, @502 ];
+        [self sendCommand:command];
+        
+        [self refreshCapabilities];
+    }
 }
 
 - (void)close
 {
-    [self.istream close];
-    [self.ostream close];
+    NNTPCommand *command = [NNTPCommand new];
+    command->_command = @"QUIT\r\n";
+    command->_validCodes = @[ @205 ];
+    [self sendCommand:command];
 }
 
 - (void)flushCommands
 {
-    for (NNTPCommand *command in self.commands) {
-        if (!command.sent) {
-            if (![command send:self.ostream]) {
+    static BOOL guard = NO;
+    
+    if (guard) {
+        return;
+    }
+    guard = YES;
+    
+    @try {
+        for (NNTPCommand *command in _commands) {
+            if (!command->_sent) {
+                if (![command send:_ostream]) {
+                    return;
+                }
+            }
+            if (!command->_done) {
+                [self waitForCondition:^bool (void) {
+                    return command->_done;
+                }];
+            }
+            if (!command->_done && !command->_pipelinable) {
                 return;
             }
         }
-        if (!command.done) {
-            [self waitForCondition:^bool (void) {
-                return [command done];
-            }];
-        }
-        if (!command.done && !command.pipelinable) {
-            return;
-        }
+    } @finally {
+        guard = NO;
     }
 }
 
 - (void)sendCommand:(NNTPCommand *)command
 {
-    [self.commands addTail:command];
-    if (self.ostream.hasSpaceAvailable) {
+    [_commands addTail:command];
+    if (_ostream.hasSpaceAvailable) {
         [self flushCommands];
     }
 }
@@ -228,33 +341,28 @@
 
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
-            NSLog(@"OpenCompleted");
             [self.delegate nntp:self handleEvent:NNTPEventConnected];
             break;
+
         case NSStreamEventHasSpaceAvailable:
-            NSLog(@"SpaceAvailable");
-            assert (stream == self.ostream);
+            assert (stream == _ostream);
             [self flushCommands];
             break;
-        case NSStreamEventHasBytesAvailable:
-            NSLog(@"BytesAvailable");
-            while ((line = [self.istream readLine])) {
-                NSLog(@"read line: %@", line);
 
-                command = (NNTPCommand *)self.commands.head;
-                if (command == nil || !command.sent) {
+        case NSStreamEventHasBytesAvailable:
+            while ((line = [_istream readLine])) {
+                NSLog(@">> %@", line);
+
+                command = (NNTPCommand *)_commands.head;
+                if (command == nil || !command->_sent) {
                     [self streamError:@"Received spurious data"];
                     return;
                 }
 
-                if (![command readLine:line]) {
-                    [self streamError:@"Invalid data received"];
-                    return;
-                }
-                
-                if (command.done) {
+                [command readLine:line];
+                if (command->_done) {
                     /* TODO: do something with the command */
-                    [self.commands popHead];
+                    [_commands popHead];
                     [self flushCommands];
                 }
             }
@@ -269,6 +377,7 @@
             NSLog(@"ErrorOccured");
             [self streamError:[[stream streamError] description]];
             break;
+
         default:
             break;
     }
@@ -276,8 +385,8 @@
 
 - (NNTPStatus)status
 {
-    NSStreamStatus ostatus = self.ostream.streamStatus;
-    NSStreamStatus istatus = self.istream.streamStatus;
+    NSStreamStatus ostatus = _ostream.streamStatus;
+    NSStreamStatus istatus = _istream.streamStatus;
     
     if (ostatus == NSStreamStatusError || istatus == NSStreamStatusError) {
         return NNTPError;
