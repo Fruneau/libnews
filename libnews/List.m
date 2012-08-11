@@ -31,7 +31,7 @@ static void addNode(id<DListNode> node, id<DListNode> prev, id<DListNode> next)
 static void removeNode(id<DListNode> prev, id<DListNode> next)
 {
     setNextNode(prev, next);
-    prev.next = next;
+    next.prev = prev;
 }
 
 static void detachNode(id<DListNode> node)
@@ -246,5 +246,18 @@ static void detachNode(id<DListNode> node)
     }
     buffer[len] = node;
     return res;
+}
+
+- (NSString *)description
+{
+    NSMutableString *str = [NSMutableString string];
+    id<DListNode> node = self.next;
+    
+    [str appendFormat:@"%p:[%p;%p] ", self, self.prev, self.next];
+    while (node != self) {
+        [str appendFormat:@"%p:[%p;%p] <-> ", node, node.prev, node.next];
+        node = node.next;
+    }
+    return str;
 }
 @end

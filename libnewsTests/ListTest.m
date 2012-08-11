@@ -106,4 +106,25 @@
     STAssertEquals([(DListNodeTest *)[list popHead] data], 2u, @"");
     STAssertTrue([list isSingular], @"");
 }
+
+- (void)testSimple
+{
+    DList *list = [DList new];
+    int len = 0;
+    
+    [list addTail:[DListNodeTest newWithData:2]];
+    for (DListNodeTest *node in list) {
+        STAssertEquals([node data], 2u, @"");
+        len++;
+    }
+ 
+    [list popHead];
+    [list addTail:[DListNodeTest newWithData:3]];
+    len = 0;
+    for (DListNodeTest *node in list) {
+        STAssertEquals([node data], 3u, @"");
+        len++;
+    }
+    STAssertEquals(len, 1, @"");
+}
 @end
