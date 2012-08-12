@@ -13,7 +13,7 @@
 static void setNextNode(id<DListNode> node, id<DListNode> next)
 {
     node.next = next;
-    if (next == nil || [next isMemberOfClass:[DList class]]) {
+    if (next == nil || [next isKindOfClass:[DList class]]) {
         node.refs = nil;
     } else {
         node.refs = next;
