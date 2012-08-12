@@ -87,7 +87,9 @@ struct NNTPCommandParams {
 - (NNTPCommand *)init:(NNTPCommandType)type withNNTP:(NNTP *)nntp
               andArgs:(NSArray *)args;
 - (BOOL)send:(NSOutputStream *)stream;
+- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error;
 - (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error;
+- (BOOL)readFromStream:(NSInputStream *)stream;
 @end
 
 @implementation NNTPCommand
@@ -163,30 +165,20 @@ struct NNTPCommandParams {
     return [NSError errorWithDomain:NNTPErrorDomain code:code userInfo:dict];
 }
 
-- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
+- (BOOL)done:(NSError *)error
 {
-    if (_gotHeader) {
-        if ([line isEqualToString:@"."]) {
-            _done = YES;
-        } else if ([line characterAtIndex:0] == '.') {
-            if (!_onLine([line substringFromIndex:1])) {
-                *error = [self error:NNTPInvalidDataError forLine:line];
-                return NO;
-            }
-        } else {
-            if (!_onLine(line)) {
-                *error = [self error:NNTPInvalidDataError forLine:line];
-                return NO;
-            }
-        }
-        return YES;
+    if (_onDone) {
+        _onDone(error);
     }
+    return YES;
+}
 
+- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error
+{
     if (line.length < 5) {
         *error = [self error:NNTPProtocoleError forLine:line];
         return NO;
     }
-    _gotHeader = YES;
 
     NSString *code = [line substringToIndex:3];
     NSScanner *scanner = [NSScanner scannerWithString:code];
@@ -210,6 +202,43 @@ struct NNTPCommandParams {
         }
     }
     *error = [self error:NNTPUnexpectedResponseAnswerError forLine:line];
+    return NO;
+}
+
+- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
+{
+    NSString *l = line;
+
+    if ([line characterAtIndex:0] == '.') {
+        l = [line substringFromIndex:1];
+    }
+    if (!_onLine(l)) {
+        *error = [self error:NNTPInvalidDataError forLine:line];
+        return NO;
+    }
+    return YES;
+}
+
+- (BOOL)readFromStream:(NSInputStream *)stream
+{
+    NSString *line;
+
+    while ((line = [stream readLine])) {
+        NSErrorRef error = nil;
+        NSLog(@">> %@", line);
+
+        if (!_gotHeader) {
+            _gotHeader = YES;
+
+            if (![self readHeader:line error:&error] || !_params->isMultiline) {
+                return [self done:error];
+            }
+        } else if ([line isEqualToString:@"."]) {
+            return [self done:error];
+        } else if (![self readLine:line error:&error]) {
+            return [self done:error];
+        }
+    }
     return NO;
 }
 
@@ -381,6 +410,7 @@ struct NNTPCommandParams {
 
 - (void)streamError:(NSString *)message
 {
+    NSLog(@"%@", message);
     NSError *error = [NSError errorWithDomain:NNTPErrorDomain
                                          code:NNTPAbortedError
                                      userInfo:nil];
@@ -395,9 +425,6 @@ struct NNTPCommandParams {
 
 - (void)stream:(NSStream *)stream handleEvent:(NSStreamEvent)eventCode
 {
-    NSString    *line;
-    NNTPCommand *command;
-
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
             _status = NNTPConnected;
@@ -410,32 +437,19 @@ struct NNTPCommandParams {
             break;
 
         case NSStreamEventHasBytesAvailable:
-            while ((line = [_istream readLine])) {
-                NSLog(@">> %@", line);
+            while (YES) {
+                NNTPCommand *command = _commands.head;
 
-                command = (NNTPCommand *)_commands.head;
-                if (command == nil || !command->_sent) {
+                if (!command || !command->_sent) {
                     [self streamError:@"Received spurious data"];
                     return;
                 }
-
-                NSError * __autoreleasing error;
-                if (![command readLine:line error:&error]) {
-                    if (command->_onDone) {
-                        command->_onDone(error);
-                    }
+                if ([command readFromStream:_istream]) {
                     [_commands popHead];
                     [self flushCommands];
-                }
-
-                if (command->_done) {
-                    if (command->_onDone) {
-                        command->_onDone(nil);
-                    }
-
-                    [_commands popHead];
-                    command = nil;
-                    [self flushCommands];
+                } else {
+                    /* More data is needed by the current command */
+                    break;
                 }
             }
             break;
