@@ -33,23 +33,71 @@ typedef enum NNTPCommandType {
     NNTPModeReader,
     NNTPQuit,
 
+    /* RCP 4642: StartTLS */
+    NNTPStartTls,
+
     /* RFC 4643: NNTP Authentication */
     NNTPAuthinfoUser,
     NNTPAuthinfoPass,
     NNTPAuthinfoSASL,
 } NNTPCommandType;
 
+typedef enum NNTPCapability {
+    /* RFC 3977: NNTP Version 2 */
+    NNTPCapModeReader      = 1ul << 0,
+    NNTPCapReader          = 1ul << 1,
+    NNTPCapIhave           = 1ul << 2,
+    NNTPCapPost            = 1ul << 3,
+    NNTPCapNewnews         = 1ul << 4,
+    NNTPCapHdr             = 1ul << 5,
+    NNTPCapOver            = 1ul << 6,
+    NNTPCapListActive      = 1ul << 7,
+    NNTPCapListActiveTimes = 1ul << 8,
+    NNTPCapListDistribPats = 1ul << 9,
+    NNTPCapListHeaders     = 1ul << 10,
+    NNTPCapListNewsgroups  = 1ul << 11,
+    NNTPCapListOverviewFmt = 1ul << 12,
+
+    /* RFC 4642: STARTTLS */
+    NNTPCapStartTls        = 1ul << 16,
+
+    /* RFC 4643: NNTP Authentication */
+    NNTPCapAuthinfoUser    = 1ul << 17,
+    NNTPCapAuthinfoSASL    = 1ul << 18,
+
+    /* SASL mechanism: 
+     * http://www.iana.org/assignments/sasl-mechanisms/sasl-mechanisms.xml
+     */
+    NNTPCapSaslPlain       = 1ul << 19,
+    NNTPCapSaslLogin       = 1ul << 20,
+    NNTPCapSaslCramMd5     = 1ul << 21,
+    NNTPCapSaslNtml        = 1ul << 22,
+    NNTPCapSaslDigestMd5   = 1ul << 23,
+    
+    /* RFC 4644: NNTP Streaming extension */
+    NNTPCapStreaming       = 1ul << 32,
+
+    /* Special capabilities */
+    NNTPCapVersion         = 1ul << 62,
+    NNTPCapImplementation  = 1ul << 63,
+} NNTPCapability;
+
+NSDictionary *nntpCapabilitiesMap = nil;
+
 struct NNTPCommandParams {
     NNTPCommandType type;
     const char     *command;
     const uint16_t *validCodes;
+    uint64_t        capabilities;
 
     unsigned        isMultiline         : 1;
     unsigned        isPipelinable       : 1;
+    unsigned        requireCapRefresh   : 1;
 } const commandParams[] = {
     [NNTPConnect] = {
         .type               = NNTPConnect,
         .validCodes         = (const uint16_t[]){ 200, 201, 400, 502, 0 },
+        .requireCapRefresh  = YES,
     },
 
     [NNTPCapabilities] = {
@@ -63,6 +111,8 @@ struct NNTPCommandParams {
         .type               = NNTPModeReader,
         .command            = "MODE READER",
         .validCodes         = (const uint16_t[]){ 200, 201, 502, 0 },
+        .capabilities       = NNTPCapModeReader,
+        .requireCapRefresh  = YES,
     },
 
     [NNTPQuit] = {
@@ -75,18 +125,22 @@ struct NNTPCommandParams {
         .type               = NNTPAuthinfoUser,
         .command            = "AUTHINFO USER",
         .validCodes         = (const uint16_t[]){ 281, 381, 481, 482, 502, 0 },
+        .capabilities       = NNTPCapAuthinfoUser,
     },
 
     [NNTPAuthinfoPass] = {
         .type               = NNTPAuthinfoPass,
         .command            = "AUTHINFO PASS",
         .validCodes         = (const uint16_t[]){ 281, 481, 482, 502, 0 },
+        .capabilities       = NNTPCapAuthinfoUser,
+        .requireCapRefresh  = YES,
     },
 
     [NNTPAuthinfoSASL] = {
         .type               = NNTPAuthinfoSASL,
         .command            = "AUTHINFO SASL",
         .validCodes         = (const uint16_t[]){ 281, 283, 383, 481, 482, 502, 0 },
+        .capabilities       = NNTPCapAuthinfoSASL,
     }
 };
 
@@ -287,14 +341,7 @@ struct NNTPCommandParams {
 
     int             _nntpVersion;
     NSString       *_implementation;
-    struct {
-        unsigned     modeReader : 1;
-        unsigned     reader     : 1;
-
-        /* RFC 4643: NNTP Authentification */
-        unsigned     authinfoUser : 1;
-        unsigned     authinfoSasl : 1;
-    } _capabilities;
+    uint64_t        _capabilities;
 }
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
@@ -333,10 +380,54 @@ struct NNTPCommandParams {
 
 - (void)refreshCapabilities:(void (^)(void))on_done
 {
+    if (!nntpCapabilitiesMap) {
+        nntpCapabilitiesMap = @{
+            /* RFC 3977: NNTP Version 2 */
+            @"VERSION":         @(NNTPCapVersion),
+            @"IMPLEMENTATION":  @(NNTPCapImplementation),
+            @"MODE-READER":     @(NNTPCapModeReader),
+            @"READER":          @(NNTPCapReader),
+            @"IHAVE":           @(NNTPCapIhave),
+            @"POST":            @(NNTPCapPost),
+            @"NEWNEWS":         @(NNTPCapNewnews),
+            @"HDR":             @(NNTPCapHdr),
+            @"OVER":            @(NNTPCapOver),
+            @"LIST":            @{
+                @"ACTIVE":          @(NNTPCapListActive),
+                @"ACTIVE.TIMES":    @(NNTPCapListActiveTimes),
+                @"DISTRIB.PATS":    @(NNTPCapListDistribPats),
+                @"HEADERS":         @(NNTPCapListHeaders),
+                @"NEWSGROUPS":      @(NNTPCapListNewsgroups),
+                @"OVERVIEW.FMT":    @(NNTPCapListOverviewFmt),
+            },
+
+            /* RFC 4642: STARTTLS */
+            @"STARTTLS":        @(NNTPCapStartTls),
+
+            /* RFC 4643: NNTP Authentication */
+            @"AUTHINFO":        @{
+                @"USER":            @(NNTPCapAuthinfoUser),
+                @"SASL":            @(NNTPCapAuthinfoSASL),
+            },
+            /* SASL Mechanisms */
+            @"SASL":            @{
+                @"PLAIN":           @(NNTPCapSaslPlain),
+                @"LOGIN":           @(NNTPCapSaslLogin),
+                @"CRAM-MD5":        @(NNTPCapSaslCramMd5),
+                @"NTLM":            @(NNTPCapSaslNtml),
+                @"DIGEST-MD5":      @(NNTPCapSaslDigestMd5),
+            },
+
+            /* RFC 4644: NNTP Streaming */
+            @"STREAMING":       @(NNTPCapStreaming),
+        };
+    }
+
+
     _nntpVersion    = 0;
     _implementation = nil;
-    bzero(&_capabilities, sizeof(_capabilities));
-    _status = NNTPConnected;
+    _capabilities   = 0;
+    _status         = NNTPConnected;
 
     [self sendCommand:NNTPCapabilities
              withArgs:nil
@@ -350,46 +441,50 @@ struct NNTPCommandParams {
                    capability = [capability uppercaseString];
                    [scanner setCharactersToBeSkipped:space];
 
-                   if (_nntpVersion == 0) {
-                       if (![capability isEqualToString:@"VERSION"]) {
-                           return NO;
-                       }
-                       if (![scanner scanInt:&_nntpVersion]) {
-                           return NO;
-                       }
-                   } else if ([capability isEqualToString:@"MODE-READER"]) {
-                       _capabilities.modeReader = YES;
-                   } else if ([capability isEqualToString:@"READER"]) {
-                       _capabilities.reader = YES;
-                   } else if ([capability isEqualToString:@"IMPLEMENTATION"]) {
-                       _implementation = [scanner remainder];
-                   } else if ([capability isEqualToString:@"AUTHINFO"]) {
-                       while (![scanner isAtEnd]) {
-                           NSString * __autoreleasing type;
-
-                           [scanner scanUpToCharactersFromSet:space
-                                                   intoString:&type];
-                           type = [type uppercaseString];
-                           if ([type isEqualToString:@"USER"]) {
-                               _capabilities.authinfoUser = YES;
-                           } else if ([type isEqualToString:@"SASL"]) {
-                               _capabilities.authinfoSasl = YES;
-                           } else {
-                               NSLog(@"unsupported authentication method %@",
-                                     type);
-                           }
-                       }
-                   } else {
+                   id entry = nntpCapabilitiesMap[capability];
+                   if (entry == nil) {
                        NSLog(@"unsupported capability: %@", line);
+                       return YES;
+                   } else if ([entry isKindOfClass:[NSNumber class]]) {
+                       uint64_t v = [(NSNumber *)entry unsignedLongLongValue];
+
+                       if (v == NNTPCapVersion) {
+                           if (![scanner scanInt:&_nntpVersion]) {
+                               return NO;
+                           }
+                           return YES;
+                       } else if (v == NNTPCapImplementation) {
+                           _implementation = [scanner remainder];
+                           return YES;
+                       } else {
+                           _capabilities |= v;
+                           return YES;
+                       }
+                   }
+
+                   NSDictionary *sub = (NSDictionary *)entry;
+                   while (![scanner isAtEnd]) {
+                       NSString * __autoreleasing subtype;
+
+                       [scanner scanUpToCharactersFromSet:space
+                                               intoString:&subtype];
+                       subtype = [subtype uppercaseString];
+
+                       NSNumber *flag = sub[subtype];
+                       if (flag == nil) {
+                           NSLog(@"unsupported option %@ for capability %@",
+                                 subtype, capability);
+                           continue;
+                       }
+                       _capabilities |= [(NSNumber *)flag unsignedLongLongValue];
                    }
                    return YES;
-
                }
                onDone: ^ (NSError *error) {
                    if (error) {
                        return;
                    }
-                   if (_capabilities.reader) {
+                   if (_capabilities & NNTPCapReader) {
                        _status = NNTPReady;
                    }
                    if (on_done) {
@@ -426,20 +521,21 @@ struct NNTPCommandParams {
     
     [self sendCommand:NNTPConnect];
     [self refreshCapabilities:^{
-        if (!_capabilities.reader && !_capabilities.modeReader) {
+        if (_capabilities & NNTPCapReader) {
+            return;
+        } else if (!(_capabilities & NNTPCapModeReader)) {
             [self close];
             [NSException raise:@"invalid server"
                         format:@"cannot post on that server"];
-        } else if (!_capabilities.reader) {
-            [self sendCommand:NNTPModeReader];
-            [self refreshCapabilities:nil];
         }
+        [self sendCommand:NNTPModeReader];
+        [self refreshCapabilities:nil];
     }];
 }
 
 - (void)authenticate:(NSString *)login password:(NSString *)password
 {
-    if (!_capabilities.authinfoUser) {
+    if (!(_capabilities & NNTPCapAuthinfoUser)) {
         [NSException raise:@"authentication not supported"
                     format:@"the server does not support AUTHINFO USER "
          "authentication method"];
