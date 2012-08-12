@@ -26,6 +26,22 @@ typedef enum NNTPStatus {
     NNTPError,
 } NNTPStatus;
 
+extern NSString * const NNTPErrorDomain;
+extern NSString * const NNTPConnectionKey;
+extern NSString * const NNTPCommandKey;
+extern NSString * const NNTPReplyLineKey;
+extern NSString * const NNTPReplyCodeKey;
+extern NSString * const NNTPReplyMessageKey;
+
+enum NNTPErrorCode {
+    NNTPTemporaryError,
+    NNTPPermanentError,
+    NNTPUnexpectedResponseAnswerError,
+    NNTPProtocoleError,
+    NNTPUnsupportedCommandError,
+    NNTPAbortedError,
+};
+
 @protocol NNTPDelegate <NSObject>
 - (void)nntp:(NNTP *)nntp handleEvent:(NNTPEvent)event;
 @end
