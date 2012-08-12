@@ -20,6 +20,9 @@ typedef enum NNTPStatus {
     NNTPDisconnected,
     NNTPConnecting,
     NNTPConnected,
+    NNTPNeedAuth,
+    NNTPReady,
+    NNTPReadOnly,
     NNTPError,
 } NNTPStatus;
 
@@ -32,9 +35,6 @@ typedef enum NNTPStatus {
 @interface NNTP : NSObject
 @property(strong)   id<NNTPDelegate> delegate;
 @property(readonly) NNTPStatus       status;
-
-- (void)setSync:(NSInteger)timeout;
-- (void)setAsync;
 
 - (void)connect:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl;
 - (void)close;

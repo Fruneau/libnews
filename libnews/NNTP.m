@@ -11,26 +11,6 @@
 #import "List.h"
 
 
-/** NSRunLoop extensions.
- *
- * Provide some extentions to NSRuntool in order to allow synchronous
- * event processing.
- */
-@interface NSRunLoop (Sync)
-- (void)runUntilDate:(NSDate *)date orCondition:(bool (^)(void))condition;
-@end
-
-@implementation NSRunLoop (Sync)
-- (void)runUntilDate:(NSDate *)date orCondition:(bool (^)(void))condition
-{
-    while (!condition() && [date compare:[NSDate date]] == NSOrderedDescending)
-    {
-        [self runMode:NSDefaultRunLoopMode beforeDate:date];
-    }
-}
-@end
-
-
 /** NNTP command.
  */
 
@@ -48,6 +28,8 @@
     
     void (^_on_header)(NSUInteger code, NSString *message);
     void (^_on_line)(NSString *line);
+    void (^_on_done)(void);
+    void (^_on_error)(NSException *exn);
 }
 
 - (BOOL)send:(NSOutputStream *)stream;
@@ -83,7 +65,8 @@
         int icode;
         NSString *code = [line substringToIndex:3];
         NSScanner *scanner = [NSScanner scannerWithString:code];
-        
+
+        [scanner setCharactersToBeSkipped:nil];
         if (![scanner scanInt:&icode] || ![scanner isAtEnd] || icode < 0
             || icode >= 600)
         {
@@ -140,7 +123,7 @@
     NSOutputStream *_ostream;
     DList          *_commands;
     NSInteger       _syncTimeout;
-    
+
     int             _nntpVersion;
     NSString       *_implementation;
     struct {
@@ -154,7 +137,7 @@
 
 
 @implementation NNTP
-@dynamic status;
+@synthesize status = _status;
 
 - (id)init
 {
@@ -162,35 +145,12 @@
     return self;
 }
 
-- (void)setSync:(NSInteger)timeout
-{
-    _syncTimeout = timeout;
-}
-
-- (void)setAsync
-{
-    _syncTimeout = 0;
-}
-
-- (void)waitForCondition:(bool (^)(void))condition
-{
-    if (!_syncTimeout) {
-        return;
-    }
-
-    NSDate *date = [NSDate dateWithTimeIntervalSinceNow:_syncTimeout];
-    [[NSRunLoop currentRunLoop] runUntilDate:date orCondition:condition];
-    
-    if (!condition()) {
-        [NSException raise:@"Timeout" format:@"reached timeout"];
-    }
-}
-
-- (void)refreshCapabilities
+- (void)refreshCapabilities:(void (^)(void))on_done
 {
     _nntpVersion    = 0;
     _implementation = nil;
     bzero(&_capabilities, sizeof(_capabilities));
+    _status = NNTPConnected;
 
     NNTPCommand *command = [NNTPCommand new];
     command->_command      = @"CAPABILITIES\r\n";
@@ -202,8 +162,10 @@
         NSCharacterSet *space;
         NSScanner *scanner = [NSScanner scannerWithString:line];
         NSString  * __autoreleasing capability;
-        
+
+
         space = [NSCharacterSet characterSetWithCharactersInString:@" "];
+        [scanner setCharactersToBeSkipped:nil];
         [scanner scanUpToCharactersFromSet:space intoString:&capability];
         [scanner scanCharactersFromSet:space intoString:NULL];
         
@@ -227,6 +189,15 @@
             NSLog(@"unsupported capability: %@", line);
         }
     };
+    command->_on_done = ^ {
+        if (_capabilities.reader) {
+            _status = NNTPReady;
+        }
+        if (on_done) {
+            on_done();
+        }
+    };
+
     [self sendCommand:command];
 }
 
@@ -240,10 +211,8 @@
                                        port, &cfistream, &cfostream);
     _istream = (NSInputStream *)CFBridgingRelease(cfistream);
     _ostream = (NSOutputStream *)CFBridgingRelease(cfostream);
-    _istream = [NSInputStream fromStream:_istream
-                                     maxSize:2u << 20];
-    _ostream = [NSOutputStream toStream:_ostream
-                                    maxSize:2u << 20];
+    _istream = [NSInputStream fromStream:_istream maxSize:2u << 20];
+    _ostream = [NSOutputStream toStream:_ostream maxSize:2u << 20];
     _istream.delegate = self;
     _ostream.delegate = self;
     
@@ -265,57 +234,41 @@
     command->_done         = NO;
     [self sendCommand:command];
     
-    [self refreshCapabilities];
-        
-    if (!_capabilities.reader && !_capabilities.modeReader) {
-        [self close];
-        [NSException raise:@"invalid server"
-                    format:@"cannot post on that server"];
-    } else if (!_capabilities.reader) {
-        command = [NNTPCommand new];
-        command->_command     = @"MODE READER\r\n";
-        command->_validCodes  = @[ @200, @201, @502 ];
-        [self sendCommand:command];
-        
-        [self refreshCapabilities];
-    }
+    [self refreshCapabilities:^{
+        if (!_capabilities.reader && !_capabilities.modeReader) {
+            [self close];
+            [NSException raise:@"invalid server"
+                        format:@"cannot post on that server"];
+        } else if (!_capabilities.reader) {
+            NNTPCommand *command2 = [NNTPCommand new];
+            command2->_command     = @"MODE READER\r\n";
+            command2->_validCodes  = @[ @200, @201, @502 ];
+            [self sendCommand:command2];
+
+            [self refreshCapabilities:nil];
+        }
+    }];
 }
 
 - (void)close
 {
     NNTPCommand *command = [NNTPCommand new];
-    command->_command = @"QUIT\r\n";
+    command->_command    = @"QUIT\r\n";
     command->_validCodes = @[ @205 ];
     [self sendCommand:command];
 }
 
 - (void)flushCommands
 {
-    static BOOL guard = NO;
-    
-    if (guard) {
-        return;
-    }
-    guard = YES;
-    
-    @try {
-        for (NNTPCommand *command in _commands) {
-            if (!command->_sent) {
-                if (![command send:_ostream]) {
-                    return;
-                }
-            }
-            if (!command->_done) {
-                [self waitForCondition:^bool (void) {
-                    return command->_done;
-                }];
-            }
-            if (!command->_done && !command->_pipelinable) {
+    for (NNTPCommand *command in _commands) {
+        if (!command->_sent) {
+            if (![command send:_ostream]) {
                 return;
             }
         }
-    } @finally {
-        guard = NO;
+        if (!command->_done && !command->_pipelinable) {
+            return;
+        }
     }
 }
 
@@ -329,7 +282,11 @@
 
 - (void)streamError:(NSString *)message
 {
-    NSLog(@"Stream error encountered: %@", message);
+    for (NNTPCommand *command in _commands) {
+        if (command->_on_error) {
+            command->_on_error(NULL);
+        }
+    }
     [self.delegate nntp:self handleEvent:NNTPEventError];
     [self close];
 }
@@ -341,6 +298,7 @@
 
     switch (eventCode) {
         case NSStreamEventOpenCompleted:
+            _status = NNTPConnected;
             [self.delegate nntp:self handleEvent:NNTPEventConnected];
             break;
 
@@ -359,10 +317,28 @@
                     return;
                 }
 
-                [command readLine:line];
-                if (command->_done) {
-                    /* TODO: do something with the command */
+                @try {
+                    [command readLine:line];
+                } @catch (NSException *exception) {
+                    if (!command) {
+                        continue;
+                    }
+
+                    if (command->_on_error) {
+                        command->_on_error(exception);
+                    }
                     [_commands popHead];
+                    [self flushCommands];
+                    continue;
+                }
+
+                if (command->_done) {
+                    if (command->_on_done) {
+                        command->_on_done();
+                    }
+
+                    [_commands popHead];
+                    command = nil;
                     [self flushCommands];
                 }
             }
@@ -370,11 +346,12 @@
 
         case NSStreamEventEndEncountered:
             NSLog(@"EndEncountered");
+            _status = NNTPDisconnected;
             [self.delegate nntp:self handleEvent:NNTPEventDisconnected];
             break;
 
         case NSStreamEventErrorOccurred:
-            NSLog(@"ErrorOccured");
+            _status = NNTPError;
             [self streamError:[[stream streamError] description]];
             break;
 
@@ -385,22 +362,6 @@
 
 - (NNTPStatus)status
 {
-    NSStreamStatus ostatus = _ostream.streamStatus;
-    NSStreamStatus istatus = _istream.streamStatus;
-    
-    if (ostatus == NSStreamStatusError || istatus == NSStreamStatusError) {
-        return NNTPError;
-    } else if (ostatus == NSStreamStatusOpening
-               || istatus == NSStreamStatusOpening)
-    {
-        return NNTPConnecting;
-    } else if (ostatus == NSStreamStatusNotOpen
-               || ostatus == NSStreamStatusClosed
-               || istatus == NSStreamStatusClosed
-               || istatus == NSStreamStatusNotOpen)
-    {
-        return NNTPDisconnected;
-    }
-    return NNTPConnected;
+    return _status;
 }
 @end

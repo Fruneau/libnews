@@ -14,6 +14,8 @@
 		B40DD32415C58180001EB875 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B40DD32215C58180001EB875 /* InfoPlist.strings */; };
 		B40DD33215C581DF001EB875 /* NewsRC.h in Headers */ = {isa = PBXBuildFile; fileRef = B40DD33015C581DF001EB875 /* NewsRC.h */; };
 		B40DD33315C581DF001EB875 /* NewsRC.m in Sources */ = {isa = PBXBuildFile; fileRef = B40DD33115C581DF001EB875 /* NewsRC.m */; };
+		B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */; };
+		B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */; };
 		B42AF92915CC747A008878AE /* NNTPTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92815CC747A008878AE /* NNTPTest.m */; };
 		B42AF92D15CD60CB008878AE /* List.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF92B15CD60CB008878AE /* List.h */; };
 		B42AF92E15CD60CB008878AE /* List.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92C15CD60CB008878AE /* List.m */; };
@@ -48,6 +50,8 @@
 		B40DD32315C58180001EB875 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		B40DD33015C581DF001EB875 /* NewsRC.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NewsRC.h; sourceTree = "<group>"; };
 		B40DD33115C581DF001EB875 /* NewsRC.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NewsRC.m; sourceTree = "<group>"; };
+		B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSRunLoop+Sync.h"; sourceTree = "<group>"; };
+		B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSRunLoop+Sync.m"; sourceTree = "<group>"; };
 		B42AF92715CC747A008878AE /* NNTPTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NNTPTest.h; path = ../libnews/NNTPTest.h; sourceTree = "<group>"; };
 		B42AF92815CC747A008878AE /* NNTPTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = NNTPTest.m; path = ../libnews/NNTPTest.m; sourceTree = "<group>"; };
 		B42AF92B15CD60CB008878AE /* List.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = List.h; sourceTree = "<group>"; };
@@ -128,6 +132,8 @@
 			children = (
 				B40DD33015C581DF001EB875 /* NewsRC.h */,
 				B40DD33115C581DF001EB875 /* NewsRC.m */,
+				B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */,
+				B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */,
 				B48DA28015CB1ADC0054F619 /* NNTP.h */,
 				B48DA28115CB1ADC0054F619 /* NNTP.m */,
 				B42AF93A15CEE4D7008878AE /* BufferedStream.h */,
@@ -181,6 +187,7 @@
 				B48DA28215CB1ADC0054F619 /* NNTP.h in Headers */,
 				B42AF92D15CD60CB008878AE /* List.h in Headers */,
 				B42AF93C15CEE4D7008878AE /* BufferedStream.h in Headers */,
+				B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,6 +293,7 @@
 				B48DA28315CB1ADC0054F619 /* NNTP.m in Sources */,
 				B42AF92E15CD60CB008878AE /* List.m in Sources */,
 				B42AF93D15CEE4D7008878AE /* BufferedStream.m in Sources */,
+				B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
