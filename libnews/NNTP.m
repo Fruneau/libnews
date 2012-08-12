@@ -32,6 +32,29 @@ typedef enum NNTPCommandType {
     NNTPCapabilities,
     NNTPModeReader,
     NNTPQuit,
+    NNTPGroup,
+    NNTPListGroup,
+    NNTPLast,
+    NNTPNext,
+    NNTPArticle,
+    NNTPHead,
+    NNTPBody,
+    NNTPStat,
+    NNTPPost,
+    NNTPIhave,
+    NNTPDate,
+    NNTPHelp,
+    NNTPNewgroups,
+    NNTPNewnews,
+    NNTPListActive,
+    NNTPListActiveTimes,
+    NNTPListDistribPats,
+    NNTPListHeaders,
+    NNTPListNewsgroups,
+    NNTPListOverviewFmt,
+    NNTPOver,
+    NNTPHdr,
+    
 
     /* RCP 4642: StartTLS */
     NNTPStartTls,
@@ -120,6 +143,214 @@ struct NNTPCommandParams {
         .command            = "QUIT",
         .validCodes         = (const uint16_t[]){ 205, 0 },
     },
+
+    
+    /* Group and article selection */
+
+    [NNTPGroup] = {
+        .type               = NNTPGroup,
+        .command            = "GROUP",
+        .validCodes         = (const uint16_t[]){ 211, 411, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+    },
+
+    [NNTPListGroup] = {
+        .type               = NNTPListGroup,
+        .command            = "LISTGROUP",
+        .validCodes         = (const uint16_t[]){ 211, 411, 412, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPLast] = {
+        .type               = NNTPLast,
+        .command            = "LAST",
+        .validCodes         = (const uint16_t[]){ 223, 412, 420, 422, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+    },
+
+    [NNTPNext] = {
+        .type               = NNTPNext,
+        .command            = "NEXT",
+        .validCodes         = (const uint16_t[]){ 223, 412, 420, 421, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+    },
+
+
+    /* Article retrieval */
+
+    [NNTPArticle] = {
+        .type               = NNTPArticle,
+        .command            = "ARTICLE",
+        .validCodes         = (const uint16_t[]){ 220, 412, 420, 423, 430, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPHead] = {
+        .type               = NNTPHead,
+        .command            = "HEAD",
+        .validCodes         = (const uint16_t[]){ 221, 412, 420, 423, 430, 0 },
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPBody] = {
+        .type               = NNTPBody,
+        .command            = "BODY",
+        .validCodes         = (const uint16_t[]){ 222, 412, 420, 423, 430, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPStat] = {
+        .type               = NNTPStat,
+        .command            = "STAT",
+        .validCodes         = (const uint16_t[]){ 223, 412, 420, 423, 430, 0 },
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    
+    /* Posting */
+
+    [NNTPPost] = {
+        .type               = NNTPPost,
+        .command            = "POST",
+        .validCodes         = (const uint16_t[]){ 340, 440, 0 },
+        .capabilities       = NNTPCapPost,
+    },
+
+    [NNTPIhave] = {
+        .type               = NNTPIhave,
+        .command            = "IHAVE",
+        .validCodes         = (const uint16_t[]){ 335, 435, 436, 0 },
+        .capabilities       = NNTPCapIhave,
+    },
+
+
+    /* Information */
+    
+    [NNTPDate] = {
+        .type               = NNTPDate,
+        .command            = "DATE",
+        .validCodes         = (const uint16_t[]){ 111, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+    },
+
+    [NNTPHelp] = {
+        .type               = NNTPHelp,
+        .command            = "HELP",
+        .validCodes         = (const uint16_t[]){ 100, 0 },
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPNewgroups] = {
+        .type               = NNTPNewgroups,
+        .command            = "NEWGROUPS",
+        .validCodes         = (const uint16_t[]){ 231, 0 },
+        .capabilities       = NNTPCapReader,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPNewnews] = {
+        .type               = NNTPNewnews,
+        .command            = "NEWNEWS",
+        .validCodes         = (const uint16_t[]){ 230, 0 },
+        .capabilities       = NNTPCapNewnews,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+
+    /* List */
+
+    [NNTPListActive] = {
+        .type               = NNTPListActive,
+        .command            = "LIST ACTIVE",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListActive,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPListActiveTimes] = {
+        .type               = NNTPListActiveTimes,
+        .command            = "LIST ACTIVE.TIMES",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListActiveTimes,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPListDistribPats] = {
+        .type               = NNTPListDistribPats,
+        .command            = "LIST DISTRIB.PATS",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListDistribPats,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPListNewsgroups] = {
+        .type               = NNTPListNewsgroups,
+        .command            = "LIST NEWSGROUPS",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListNewsgroups,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    
+    /* Article field access */
+
+    [NNTPOver] = {
+        .type               = NNTPOver,
+        .command            = "OVER",
+        .validCodes         = (const uint16_t[]){ 224, 412, 420, 423, 430, 0 },
+        .capabilities       = NNTPCapOver,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPListOverviewFmt] = {
+        .type               = NNTPListOverviewFmt,
+        .command            = "LIST OVERVIEW.FMT",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListOverviewFmt,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPHdr] = {
+        .type               = NNTPHdr,
+        .command            = "HDR",
+        .validCodes         = (const uint16_t[]){ 225, 412, 420, 423, 430, 0 },
+        .capabilities       = NNTPCapHdr,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+    [NNTPListHeaders] = {
+        .type               = NNTPListHeaders,
+        .command            = "LIST HEADERS",
+        .validCodes         = (const uint16_t[]){ 215, 0 },
+        .capabilities       = NNTPCapListHeaders,
+        .isPipelinable      = YES,
+        .isMultiline        = YES,
+    },
+
+
+    /* Authentication */
 
     [NNTPAuthinfoUser] = {
         .type               = NNTPAuthinfoUser,
