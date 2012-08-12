@@ -9,6 +9,7 @@
 #import "NNTP.h"
 #import "NSStream+Buffered.h"
 #import "NSCharacterSet+Spaces.h"
+#import "NSScanner+Helpers.h"
 #import "List.h"
 
 /* Global stuff
@@ -29,7 +30,12 @@ typedef enum NNTPCommandType {
     NNTPConnect,
     NNTPCapabilities,
     NNTPModeReader,
-    NNTPQuit
+    NNTPQuit,
+
+    /* RFC 4643: NNTP Authentication */
+    NNTPAuthinfoUser,
+    NNTPAuthinfoPass,
+    NNTPAuthinfoSASL,
 } NNTPCommandType;
 
 struct NNTPCommandParams {
@@ -63,6 +69,24 @@ struct NNTPCommandParams {
         .command            = "QUIT",
         .validCodes         = (const uint16_t[]){ 205, 0 },
     },
+
+    [NNTPAuthinfoUser] = {
+        .type               = NNTPAuthinfoUser,
+        .command            = "AUTHINFO USER",
+        .validCodes         = (const uint16_t[]){ 281, 381, 481, 482, 502, 0 },
+    },
+
+    [NNTPAuthinfoPass] = {
+        .type               = NNTPAuthinfoPass,
+        .command            = "AUTHINFO PASS",
+        .validCodes         = (const uint16_t[]){ 281, 481, 482, 502, 0 },
+    },
+
+    [NNTPAuthinfoSASL] = {
+        .type               = NNTPAuthinfoSASL,
+        .command            = "AUTHINFO SASL",
+        .validCodes         = (const uint16_t[]){ 281, 283, 383, 481, 482, 502, 0 },
+    }
 };
 
 @interface NNTPCommand : NSObject <DListNode>
@@ -263,6 +287,10 @@ struct NNTPCommandParams {
     struct {
         unsigned     modeReader : 1;
         unsigned     reader     : 1;
+
+        /* RFC 4643: NNTP Authentification */
+        unsigned     authinfoUser : 1;
+        unsigned     authinfoSasl : 1;
     } _capabilities;
 }
 
@@ -316,21 +344,39 @@ struct NNTPCommandParams {
 
                    [scanner setCharactersToBeSkipped:nil];
                    [scanner scanUpToCharactersFromSet:space intoString:&capability];
-                   [scanner scanCharactersFromSet:space intoString:NULL];
+                   capability = [capability uppercaseString];
+                   [scanner setCharactersToBeSkipped:space];
 
                    if (_nntpVersion == 0) {
-                       if ([capability caseInsensitiveCompare:@"VERSION"]) {
+                       if (![capability isEqualToString:@"VERSION"]) {
                            return NO;
                        }
                        if (![scanner scanInt:&_nntpVersion]) {
                            return NO;
                        }
-                   } else if (![capability caseInsensitiveCompare:@"MODE-READER"]) {
+                   } else if ([capability isEqualToString:@"MODE-READER"]) {
                        _capabilities.modeReader = YES;
-                   } else if (![capability caseInsensitiveCompare:@"READER"]) {
+                   } else if ([capability isEqualToString:@"READER"]) {
                        _capabilities.reader = YES;
-                   } else if (![capability caseInsensitiveCompare:@"IMPLEMENTATION"]) {
-                       _implementation = [line substringFromIndex:[scanner scanLocation]];
+                   } else if ([capability isEqualToString:@"IMPLEMENTATION"])
+                   {
+                       _implementation = [scanner remainder];
+                   } else if ([capability isEqualToString:@"AUTHINFO"]) {
+                       while (![scanner isAtEnd]) {
+                           NSString * __autoreleasing type;
+
+                           [scanner scanUpToCharactersFromSet:space
+                                                   intoString:&type];
+                           type = [type uppercaseString];
+                           if ([type isEqualToString:@"USER"]) {
+                               _capabilities.authinfoUser = YES;
+                           } else if ([type isEqualToString:@"SASL"]) {
+                               _capabilities.authinfoSasl = YES;
+                           } else {
+                               NSLog(@"unsupported authentication method %@",
+                                     type);
+                           }
+                       }
                    } else {
                        NSLog(@"unsupported capability: %@", line);
                    }
@@ -389,6 +435,37 @@ struct NNTPCommandParams {
     }];
 }
 
+- (void)authenticate:(NSString *)login password:(NSString *)password
+{
+    if (!_capabilities.authinfoUser) {
+        [NSException raise:@"authentication not supported"
+                    format:@"the server does not support AUTHINFO USER "
+         "authentication method"];
+    }
+
+    [self sendCommand:NNTPAuthinfoUser withArgs:@[ login ]
+               onLine:nil onDone:^(NSError *error) {
+                   if (error) {
+                       [self.delegate nntp:self
+                               handleEvent:NNTPEventAuthenticationFailed];
+                       return;
+                   }
+               }];
+    if (password) {
+        [self sendCommand:NNTPAuthinfoPass withArgs:@[ password ]
+                   onLine:nil onDone:^(NSError *error) {
+                       if (!error) {
+                           [self.delegate nntp:self
+                                   handleEvent:NNTPEventAuthenticated];
+                       } else {
+                           [self.delegate nntp:self
+                                   handleEvent:NNTPEventAuthenticationFailed];
+                       }
+                   }];
+    }
+    [self refreshCapabilities:nil];
+}
+
 - (void)close
 {
     [self sendCommand:NNTPQuit];
@@ -441,7 +518,6 @@ struct NNTPCommandParams {
                 NNTPCommand *command = _commands.head;
 
                 if (!command || !command->_sent) {
-                    [self streamError:@"Received spurious data"];
                     return;
                 }
                 if ([command readFromStream:_istream]) {

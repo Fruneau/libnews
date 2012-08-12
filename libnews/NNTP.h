@@ -13,6 +13,8 @@
 typedef enum NNTPEvent {
     NNTPEventConnected,
     NNTPEventDisconnected,
+    NNTPEventAuthenticated,
+    NNTPEventAuthenticationFailed,
     NNTPEventError,
 } NNTPEvent;
 
@@ -41,6 +43,7 @@ enum NNTPErrorCode {
     NNTPInvalidDataError,
     NNTPUnsupportedCommandError,
     NNTPAbortedError,
+    NNTPAuthFailedError,
 };
 
 @protocol NNTPDelegate <NSObject>
@@ -54,5 +57,6 @@ enum NNTPErrorCode {
 @property(readonly) NNTPStatus       status;
 
 - (void)connect:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl;
+- (void)authenticate:(NSString *)login password:(NSString *)password;
 - (void)close;
 @end
