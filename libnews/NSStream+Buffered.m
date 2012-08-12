@@ -215,6 +215,7 @@
     NSOutputStream      *_dest;
     NSUInteger           _maxSize;
     BOOL                 _inError;
+    BOOL                 _hasSpaceAvailable;
 }
 
 - (id)initToStream:(NSOutputStream *)dest maxSize:(NSUInteger)max;
@@ -262,6 +263,7 @@
         return;
     }
 
+    _hasSpaceAvailable = YES;
     [self flushBuffer];
     if (!_inError && _data.length < _maxSize) {
         [_delegate stream:self handleEvent:eventCode];
@@ -299,7 +301,7 @@
     }
     
     NSInteger written = 0;
-    if (_data.length == _skipped) {
+    if (_data.length == _skipped && [_dest hasSpaceAvailable]) {
         written = [_dest write:buffer maxLength:len];
         if (written < 0) {
             NSLog(@"network error: %@", _dest.streamError);

@@ -38,6 +38,7 @@ enum NNTPErrorCode {
     NNTPPermanentError,
     NNTPUnexpectedResponseAnswerError,
     NNTPProtocoleError,
+    NNTPInvalidDataError,
     NNTPUnsupportedCommandError,
     NNTPAbortedError,
 };

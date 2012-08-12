@@ -8,6 +8,7 @@
 
 #import "NNTP.h"
 #import "NSStream+Buffered.h"
+#import "NSCharacterSet+Spaces.h"
 #import "List.h"
 
 /* Global stuff
@@ -24,31 +25,67 @@ NSString * const NNTPReplyMessageKey = @"NNTPReplyMessageKey";
 
 typedef NSError * __autoreleasing NSErrorRef;
 
+typedef enum NNTPCommandType {
+    NNTPConnect,
+    NNTPCapabilities,
+    NNTPModeReader,
+    NNTPQuit
+} NNTPCommandType;
+
+struct NNTPCommandParams {
+    NNTPCommandType type;
+    const char     *command;
+    const uint16_t *validCodes;
+
+    unsigned        isMultiline         : 1;
+    unsigned        isPipelinable       : 1;
+} const commandParams[] = {
+    [NNTPConnect] = {
+        .type               = NNTPConnect,
+        .validCodes         = (const uint16_t[]){ 200, 201, 400, 502, 0 },
+    },
+
+    [NNTPCapabilities] = {
+        .type               = NNTPCapabilities,
+        .command            = "CAPABILITIES",
+        .validCodes         = (const uint16_t[]){ 101, 0 },
+        .isMultiline        = YES,
+    },
+
+    [NNTPModeReader] = {
+        .type               = NNTPModeReader,
+        .command            = "MODE READER",
+        .validCodes         = (const uint16_t[]){ 200, 201, 502, 0 },
+    },
+
+    [NNTPQuit] = {
+        .type               = NNTPQuit,
+        .command            = "QUIT",
+        .validCodes         = (const uint16_t[]){ 205, 0 },
+    },
+};
+
 @interface NNTPCommand : NSObject <DListNode>
 {
     @public
+    const struct NNTPCommandParams *_params;
     NNTP __weak *_nntp;
 
-    NSString  *_command;
-    NSArray   *_validCodes;
-    
-    BOOL       _acceptUnknownCodes;
-    BOOL       _sent;
-    BOOL       _gotHeader;
-    BOOL       _done;
-    BOOL       _pipelinable;
+    NSInteger    _commandLineLen;
+    char         _commandLine[513];
+    unsigned     _sent      : 1;
+    unsigned     _gotHeader : 1;
+    unsigned     _done      : 1;
 
-    int        _code;
-    NSString  *_message;
+    int          _code;
+    NSString    *_message;
     
-    BOOL (^_on_header)(NSUInteger code, NSString *message, NSErrorRef *error);
-    BOOL (^_on_line)(NSString *line, NSErrorRef *error);
-    void (^_on_done)(NSError *error);
+    BOOL (^_onLine)(NSString *line);
+    void (^_onDone)(NSError *error);
 }
 
-- (NNTPCommand *)init:(NSString *)command withNNTP:(NNTP *)nntp;
-+ (NNTPCommand *)command:(NSString *)command withNNTP:(NNTP *)nntp;
-
+- (NNTPCommand *)init:(NNTPCommandType)type withNNTP:(NNTP *)nntp
+              andArgs:(NSArray *)args;
 - (BOOL)send:(NSOutputStream *)stream;
 - (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error;
 @end
@@ -58,24 +95,44 @@ typedef NSError * __autoreleasing NSErrorRef;
 @synthesize next;
 @synthesize refs;
 
-- (NNTPCommand *)init:(NSString *)command withNNTP:(NNTP *)nntp
+- (NNTPCommand *)init:(NNTPCommandType)type withNNTP:(NNTP *)nntp
+              andArgs:(NSArray *)args
 {
-    _command = command;
     _nntp    = nntp;
-    return self;
-}
+    _params  = &commandParams[type];
 
-+ (NNTPCommand *)command:(NSString *)command withNNTP:(NNTP *)nntp
-{
-    return [[NNTPCommand alloc] init:command withNNTP:nntp];
+    if (_params->command) {
+        strcpy(_commandLine, _params->command);
+        _commandLineLen = strlen(_commandLine);
+
+        for (id arg in args) {
+            NSString *desc    = [arg description];
+            const char *chars = [desc UTF8String];
+            NSInteger   len   = strlen(chars);
+
+            _commandLine[_commandLineLen++] = ' ';
+            if (len > 510 - _commandLineLen) {
+                NSLog(@"line too long");
+                return nil;
+            }
+            strcpy(_commandLine + _commandLineLen, chars);
+            _commandLineLen += len;
+        }
+
+        _commandLine[_commandLineLen++] = '\r';
+        _commandLine[_commandLineLen++] = '\n';
+        _commandLine[_commandLineLen]   = '\0';
+    } else {
+        _sent = YES;
+    }
+    return self;
 }
 
 - (BOOL)send:(NSOutputStream *)ostream
 {
-    if (!_sent && [ostream hasCapacityAvailable:_command.length]) {
-        NSLog(@"<< %@", [_command substringToIndex:_command.length - 2]);
-        [ostream write:(const uint8_t *)[_command UTF8String]
-             maxLength:_command.length];
+    if (!_sent && [ostream hasCapacityAvailable:_commandLineLen]) {
+        NSLog(@"<< %.*s", (int)_commandLineLen - 2, _commandLine);
+        [ostream write:(const uint8_t *)_commandLine maxLength:_commandLineLen];
         _sent = YES;
         return YES;
     }
@@ -85,20 +142,21 @@ typedef NSError * __autoreleasing NSErrorRef;
 - (NSError *)error:(NSInteger)code forLine:(NSString *)line
 {
     NSDictionary *dict;
+    NSString     *cmd = [NSString stringWithUTF8String:_commandLine];
 
     if (_code > 0) {
         dict = @{
-            NNTPConnectionKey: _nntp,
-            NNTPCommandKey: _command,
-            NNTPReplyLineKey: line,
-            NNTPReplyCodeKey: @(_code),
+            NNTPConnectionKey:   _nntp,
+            NNTPCommandKey:      cmd,
+            NNTPReplyLineKey:    line,
+            NNTPReplyCodeKey:    @(_code),
             NNTPReplyMessageKey: _message
         };
     } else {
         dict = @{
             NNTPConnectionKey: _nntp,
-            NNTPCommandKey: _command,
-            NNTPReplyLineKey: line,
+            NNTPCommandKey:    cmd,
+            NNTPReplyLineKey:  line,
         };
     }
 
@@ -107,62 +165,57 @@ typedef NSError * __autoreleasing NSErrorRef;
 
 - (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
 {
-    if (!_gotHeader) {
-        if (line.length < 5) {
-            *error = [self error:NNTPProtocoleError forLine:line];
-            return NO;
-        }
-        _gotHeader = YES;
-        
-        NSString *code = [line substringToIndex:3];
-        NSScanner *scanner = [NSScanner scannerWithString:code];
-
-        [scanner setCharactersToBeSkipped:nil];
-        if (![scanner scanInt:&_code] || ![scanner isAtEnd] || _code < 0
-            || _code >= 600)
-        {
-            _code = 0;
-            *error = [self error:NNTPProtocoleError forLine:line];
-            return NO;
-        }
-
-        if (!_on_line) {
-            _done = YES;
-        }
-        _message = [line substringFromIndex:4];
-        for (NSNumber *number in _validCodes) {
-            if ([number intValue] == _code) {
-                if (_on_header) {
-                    return _on_header(_code, _message, error);
-                }
-                return YES;
-            }
-        }
-        if (!_acceptUnknownCodes) {
-            *error = [self error:NNTPUnexpectedResponseAnswerError forLine:line];
-            return NO;
-        }
-        return YES;
-    } else {
-        if (!_on_line) {
-            *error = [self error:NNTPProtocoleError forLine:line];
-            return NO;
-        }
-
+    if (_gotHeader) {
         if ([line isEqualToString:@"."]) {
             _done = YES;
         } else if ([line characterAtIndex:0] == '.') {
-            return _on_line([line substringFromIndex:1], error);
+            if (!_onLine([line substringFromIndex:1])) {
+                *error = [self error:NNTPInvalidDataError forLine:line];
+                return NO;
+            }
         } else {
-            return _on_line(line, error);
+            if (!_onLine(line)) {
+                *error = [self error:NNTPInvalidDataError forLine:line];
+                return NO;
+            }
+        }
+        return YES;
+    }
+
+    if (line.length < 5) {
+        *error = [self error:NNTPProtocoleError forLine:line];
+        return NO;
+    }
+    _gotHeader = YES;
+
+    NSString *code = [line substringToIndex:3];
+    NSScanner *scanner = [NSScanner scannerWithString:code];
+
+    [scanner setCharactersToBeSkipped:nil];
+    if (![scanner scanInt:&_code] || ![scanner isAtEnd] || _code < 0
+        || _code >= 600)
+    {
+        _code = 0;
+        *error = [self error:NNTPProtocoleError forLine:line];
+        return NO;
+    }
+
+    if (!_params->isMultiline) {
+        _done = YES;
+    }
+    _message = [line substringFromIndex:4];
+    for (int i = 0; _params->validCodes[i] != 0; i++) {
+        if (_params->validCodes[i] == _code) {
+            return YES;
         }
     }
-    return YES;
+    *error = [self error:NNTPUnexpectedResponseAnswerError forLine:line];
+    return NO;
 }
 
 - (NSString *)description
 {
-    return _command;
+    return [NSString stringWithUTF8String:_commandLine];
 }
 @end
 
@@ -197,6 +250,27 @@ typedef NSError * __autoreleasing NSErrorRef;
     return self;
 }
 
+- (void)sendCommand:(NNTPCommandType)type withArgs:(NSArray *)array
+             onLine:(BOOL (^)(NSString *line))onLine
+             onDone:(void (^)(NSError *error))onDone
+{
+    NNTPCommand *command = [[NNTPCommand alloc] init:type
+                                            withNNTP:self
+                                             andArgs:array];
+    command->_onLine = onLine;
+    command->_onDone = onDone;
+
+    [_commands addTail:command];
+    if (_ostream.hasSpaceAvailable) {
+        [self flushCommands];
+    }
+}
+
+- (void)sendCommand:(NNTPCommandType)type
+{
+    [self sendCommand:type withArgs:nil onLine:nil onDone:nil];
+}
+
 - (void)refreshCapabilities:(void (^)(void))on_done
 {
     _nntpVersion    = 0;
@@ -204,56 +278,47 @@ typedef NSError * __autoreleasing NSErrorRef;
     bzero(&_capabilities, sizeof(_capabilities));
     _status = NNTPConnected;
 
-    NNTPCommand *command = [NNTPCommand command:@"CAPABILITIES\r\n" withNNTP:self];
-    NNTPCommand __weak *cmd2 = command;
-    command->_validCodes   = @[ @101 ];
-    command->_sent         = NO;
-    command->_pipelinable  = NO;
-    command->_done         = NO;
-    command->_on_line = ^(NSString *line, NSErrorRef *error) {
-        NSCharacterSet *space;
-        NSScanner *scanner = [NSScanner scannerWithString:line];
-        NSString  * __autoreleasing capability;
+    [self sendCommand:NNTPCapabilities
+             withArgs:nil
+               onLine:^ (NSString *line) {
+                   NSCharacterSet *space = [NSCharacterSet spaceCharacter];
+                   NSScanner *scanner = [NSScanner scannerWithString:line];
+                   NSString  * __autoreleasing capability;
 
+                   [scanner setCharactersToBeSkipped:nil];
+                   [scanner scanUpToCharactersFromSet:space intoString:&capability];
+                   [scanner scanCharactersFromSet:space intoString:NULL];
 
-        space = [NSCharacterSet characterSetWithCharactersInString:@" "];
-        [scanner setCharactersToBeSkipped:nil];
-        [scanner scanUpToCharactersFromSet:space intoString:&capability];
-        [scanner scanCharactersFromSet:space intoString:NULL];
-        
-        if (_nntpVersion == 0) {
-            if ([capability caseInsensitiveCompare:@"VERSION"]) {
-                *error = [cmd2 error:NNTPProtocoleError forLine:line];
-                return NO;
-            }
-            if (![scanner scanInt:&_nntpVersion]) {
-                *error = [cmd2 error:NNTPProtocoleError forLine:line];
-                return NO;
-            }
-        } else if (![capability caseInsensitiveCompare:@"MODE-READER"]) {
-            _capabilities.modeReader = YES;
-        } else if (![capability caseInsensitiveCompare:@"READER"]) {
-            _capabilities.reader = YES;
-        } else if (![capability caseInsensitiveCompare:@"IMPLEMENTATION"]) {
-            _implementation = [line substringFromIndex:[scanner scanLocation]];
-        } else {
-            NSLog(@"unsupported capability: %@", line);
-        }
-        return YES;
-    };
-    command->_on_done = ^ (NSError *error) {
-        if (error) {
-            return;
-        }
-        if (_capabilities.reader) {
-            _status = NNTPReady;
-        }
-        if (on_done) {
-            on_done();
-        }
-    };
+                   if (_nntpVersion == 0) {
+                       if ([capability caseInsensitiveCompare:@"VERSION"]) {
+                           return NO;
+                       }
+                       if (![scanner scanInt:&_nntpVersion]) {
+                           return NO;
+                       }
+                   } else if (![capability caseInsensitiveCompare:@"MODE-READER"]) {
+                       _capabilities.modeReader = YES;
+                   } else if (![capability caseInsensitiveCompare:@"READER"]) {
+                       _capabilities.reader = YES;
+                   } else if (![capability caseInsensitiveCompare:@"IMPLEMENTATION"]) {
+                       _implementation = [line substringFromIndex:[scanner scanLocation]];
+                   } else {
+                       NSLog(@"unsupported capability: %@", line);
+                   }
+                   return YES;
 
-    [self sendCommand:command];
+               }
+               onDone: ^ (NSError *error) {
+                   if (error) {
+                       return;
+                   }
+                   if (_capabilities.reader) {
+                       _status = NNTPReady;
+                   }
+                   if (on_done) {
+                       on_done();
+                   }
+               }];
 }
 
 - (void)connect:(NSString *)host port:(UInt32)port ssl:(BOOL)ssl
@@ -282,24 +347,14 @@ typedef NSError * __autoreleasing NSErrorRef;
     [_istream open];
     [_ostream open];
     
-    NNTPCommand *command = [NNTPCommand command:nil withNNTP:self];
-    command->_validCodes   = @[ @200, @201, @400, @502 ];
-    command->_sent         = YES;
-    command->_pipelinable  = NO;
-    command->_done         = NO;
-    [self sendCommand:command];
-    
+    [self sendCommand:NNTPConnect];
     [self refreshCapabilities:^{
         if (!_capabilities.reader && !_capabilities.modeReader) {
             [self close];
             [NSException raise:@"invalid server"
                         format:@"cannot post on that server"];
         } else if (!_capabilities.reader) {
-            NNTPCommand *command2 = [NNTPCommand command:@"MODE READER\r\n"
-                                                withNNTP:self];
-            command2->_validCodes  = @[ @200, @201, @502 ];
-            [self sendCommand:command2];
-
+            [self sendCommand:NNTPModeReader];
             [self refreshCapabilities:nil];
         }
     }];
@@ -307,9 +362,7 @@ typedef NSError * __autoreleasing NSErrorRef;
 
 - (void)close
 {
-    NNTPCommand *command = [NNTPCommand command:@"QUIT\r\n" withNNTP:self];
-    command->_validCodes = @[ @205 ];
-    [self sendCommand:command];
+    [self sendCommand:NNTPQuit];
 }
 
 - (void)flushCommands
@@ -320,17 +373,9 @@ typedef NSError * __autoreleasing NSErrorRef;
                 return;
             }
         }
-        if (!command->_done && !command->_pipelinable) {
+        if (!command->_done && !command->_params->isPipelinable) {
             return;
         }
-    }
-}
-
-- (void)sendCommand:(NNTPCommand *)command
-{
-    [_commands addTail:command];
-    if (_ostream.hasSpaceAvailable) {
-        [self flushCommands];
     }
 }
 
@@ -340,8 +385,8 @@ typedef NSError * __autoreleasing NSErrorRef;
                                          code:NNTPAbortedError
                                      userInfo:nil];
     for (NNTPCommand *command in _commands) {
-        if (command->_on_done) {
-            command->_on_done(error);
+        if (command->_onDone) {
+            command->_onDone(error);
         }
     }
     [self.delegate nntp:self handleEvent:NNTPEventError];
@@ -376,16 +421,16 @@ typedef NSError * __autoreleasing NSErrorRef;
 
                 NSError * __autoreleasing error;
                 if (![command readLine:line error:&error]) {
-                    if (command->_on_done) {
-                        command->_on_done(error);
+                    if (command->_onDone) {
+                        command->_onDone(error);
                     }
                     [_commands popHead];
                     [self flushCommands];
                 }
 
                 if (command->_done) {
-                    if (command->_on_done) {
-                        command->_on_done(nil);
+                    if (command->_onDone) {
+                        command->_onDone(nil);
                     }
 
                     [_commands popHead];
