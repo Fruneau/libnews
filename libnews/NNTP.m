@@ -195,6 +195,8 @@ struct NNTPCommandParams {
     if (_onDone) {
         _onDone(error);
     }
+    _onDone = nil;
+    _onLine = nil;
     return YES;
 }
 
@@ -359,8 +361,7 @@ struct NNTPCommandParams {
                        _capabilities.modeReader = YES;
                    } else if ([capability isEqualToString:@"READER"]) {
                        _capabilities.reader = YES;
-                   } else if ([capability isEqualToString:@"IMPLEMENTATION"])
-                   {
+                   } else if ([capability isEqualToString:@"IMPLEMENTATION"]) {
                        _implementation = [scanner remainder];
                    } else if ([capability isEqualToString:@"AUTHINFO"]) {
                        while (![scanner isAtEnd]) {
@@ -493,10 +494,10 @@ struct NNTPCommandParams {
                                          code:NNTPAbortedError
                                      userInfo:nil];
     for (NNTPCommand *command in _commands) {
-        if (command->_onDone) {
-            command->_onDone(error);
-        }
+        [command done:error];
+        [_commands remove:command];
     }
+    [_commands clear];
     [self.delegate nntp:self handleEvent:NNTPEventError];
     [self close];
 }
