@@ -210,6 +210,27 @@ static void detachNode(id<DListNode> node)
     return node;
 }
 
+- (void)clear
+{
+    if ([self isEmpty]) {
+        return;
+    }
+
+    id<DListNode> head = self.head;
+    self.prev = self.next = self;
+    self.refs = nil;
+
+    /* Traversing the list is not strictly needed since we already removed the
+     * reference to the head, but it ensures the prev/next pointers are not
+     * fucked up
+     */
+    while (head != self) {
+        id<DListNode> tmp = head.next;
+        head.prev = head.next = head.refs = nil;
+        head = tmp;
+    }
+}
+
 - (NSEnumerator *)nodeEnumerator
 {
     return [[DListEnumerator alloc] initWithDList:self reverse:NO];

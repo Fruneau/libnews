@@ -34,6 +34,7 @@
 - (id<DListNode>)popHead;
 - (id<DListNode>)popTail;
 - (id<DListNode>)remove:(id<DListNode>)node;
+- (void)clear;
 
 - (NSEnumerator *)nodeEnumerator;
 - (NSEnumerator *)reverseNodeEnumerator;
