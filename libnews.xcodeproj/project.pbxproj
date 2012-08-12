@@ -16,8 +16,6 @@
 		B40DD33315C581DF001EB875 /* NewsRC.m in Sources */ = {isa = PBXBuildFile; fileRef = B40DD33115C581DF001EB875 /* NewsRC.m */; };
 		B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */; };
 		B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */; };
-		B40EFDE315D7D94D0031B476 /* NSCharacterSet+Spaces.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDE115D7D94D0031B476 /* NSCharacterSet+Spaces.h */; };
-		B40EFDE415D7D94D0031B476 /* NSCharacterSet+Spaces.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDE215D7D94D0031B476 /* NSCharacterSet+Spaces.m */; };
 		B40EFDE715D803480031B476 /* NSScanner+Helpers.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDE515D803480031B476 /* NSScanner+Helpers.h */; };
 		B40EFDE815D803480031B476 /* NSScanner+Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDE615D803480031B476 /* NSScanner+Helpers.m */; };
 		B42AF92915CC747A008878AE /* NNTPTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92815CC747A008878AE /* NNTPTest.m */; };
@@ -56,8 +54,6 @@
 		B40DD33115C581DF001EB875 /* NewsRC.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = NewsRC.m; sourceTree = "<group>"; };
 		B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSRunLoop+Sync.h"; sourceTree = "<group>"; };
 		B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSRunLoop+Sync.m"; sourceTree = "<group>"; };
-		B40EFDE115D7D94D0031B476 /* NSCharacterSet+Spaces.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSCharacterSet+Spaces.h"; sourceTree = "<group>"; };
-		B40EFDE215D7D94D0031B476 /* NSCharacterSet+Spaces.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSCharacterSet+Spaces.m"; sourceTree = "<group>"; };
 		B40EFDE515D803480031B476 /* NSScanner+Helpers.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSScanner+Helpers.h"; sourceTree = "<group>"; };
 		B40EFDE615D803480031B476 /* NSScanner+Helpers.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSScanner+Helpers.m"; sourceTree = "<group>"; };
 		B42AF92715CC747A008878AE /* NNTPTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NNTPTest.h; path = ../libnews/NNTPTest.h; sourceTree = "<group>"; };
@@ -186,8 +182,6 @@
 			children = (
 				B40EFDE515D803480031B476 /* NSScanner+Helpers.h */,
 				B40EFDE615D803480031B476 /* NSScanner+Helpers.m */,
-				B40EFDE115D7D94D0031B476 /* NSCharacterSet+Spaces.h */,
-				B40EFDE215D7D94D0031B476 /* NSCharacterSet+Spaces.m */,
 				B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */,
 				B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */,
 				B42AF93A15CEE4D7008878AE /* NSStream+Buffered.h */,
@@ -208,7 +202,6 @@
 				B42AF92D15CD60CB008878AE /* List.h in Headers */,
 				B42AF93C15CEE4D7008878AE /* NSStream+Buffered.h in Headers */,
 				B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */,
-				B40EFDE315D7D94D0031B476 /* NSCharacterSet+Spaces.h in Headers */,
 				B40EFDE715D803480031B476 /* NSScanner+Helpers.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -316,7 +309,6 @@
 				B42AF92E15CD60CB008878AE /* List.m in Sources */,
 				B42AF93D15CEE4D7008878AE /* NSStream+Buffered.m in Sources */,
 				B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */,
-				B40EFDE415D7D94D0031B476 /* NSCharacterSet+Spaces.m in Sources */,
 				B40EFDE815D803480031B476 /* NSScanner+Helpers.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

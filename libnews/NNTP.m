@@ -27,6 +27,7 @@ NSString * const NNTPReplyMessageKey = @"NNTPReplyMessageKey";
 typedef NSError * __autoreleasing NSErrorRef;
 
 typedef enum NNTPCommandType {
+    /* RFC 3977: NNTP Version 2 */
     NNTPConnect,
     NNTPCapabilities,
     NNTPModeReader,
@@ -338,7 +339,7 @@ struct NNTPCommandParams {
     [self sendCommand:NNTPCapabilities
              withArgs:nil
                onLine:^ (NSString *line) {
-                   NSCharacterSet *space = [NSCharacterSet spaceCharacter];
+                   NSCharacterSet *space = [NSCharacterSet whitespaceCharacterSet];
                    NSScanner *scanner = [NSScanner scannerWithString:line];
                    NSString  * __autoreleasing capability;
 
