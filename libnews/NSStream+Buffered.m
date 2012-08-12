@@ -6,7 +6,7 @@
 //  Copyright (c) 2012 Florent Bruneau. All rights reserved.
 //
 
-#import "BufferedStream.h"
+#import "NSStream+Buffered.h"
 
 /* Input buffered stream
  */

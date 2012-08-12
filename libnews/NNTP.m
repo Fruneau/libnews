@@ -7,7 +7,7 @@
 //
 
 #import "NNTP.h"
-#import "BufferedStream.h"
+#import "NSStream+Buffered.h"
 #import "List.h"
 
 

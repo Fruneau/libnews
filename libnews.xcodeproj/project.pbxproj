@@ -20,8 +20,8 @@
 		B42AF92D15CD60CB008878AE /* List.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF92B15CD60CB008878AE /* List.h */; };
 		B42AF92E15CD60CB008878AE /* List.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92C15CD60CB008878AE /* List.m */; };
 		B42AF93515CD7F6D008878AE /* ListTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF93415CD7F6D008878AE /* ListTest.m */; };
-		B42AF93C15CEE4D7008878AE /* BufferedStream.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF93A15CEE4D7008878AE /* BufferedStream.h */; };
-		B42AF93D15CEE4D7008878AE /* BufferedStream.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF93B15CEE4D7008878AE /* BufferedStream.m */; };
+		B42AF93C15CEE4D7008878AE /* NSStream+Buffered.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF93A15CEE4D7008878AE /* NSStream+Buffered.h */; };
+		B42AF93D15CEE4D7008878AE /* NSStream+Buffered.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF93B15CEE4D7008878AE /* NSStream+Buffered.m */; };
 		B434309715C5C047002467FF /* NewsRCTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B434309615C5C047002467FF /* NewsRCTest.m */; };
 		B48DA28215CB1ADC0054F619 /* NNTP.h in Headers */ = {isa = PBXBuildFile; fileRef = B48DA28015CB1ADC0054F619 /* NNTP.h */; };
 		B48DA28315CB1ADC0054F619 /* NNTP.m in Sources */ = {isa = PBXBuildFile; fileRef = B48DA28115CB1ADC0054F619 /* NNTP.m */; };
@@ -58,8 +58,8 @@
 		B42AF92C15CD60CB008878AE /* List.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = List.m; sourceTree = "<group>"; };
 		B42AF93315CD7F6D008878AE /* ListTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ListTest.h; sourceTree = "<group>"; };
 		B42AF93415CD7F6D008878AE /* ListTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ListTest.m; sourceTree = "<group>"; };
-		B42AF93A15CEE4D7008878AE /* BufferedStream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BufferedStream.h; sourceTree = "<group>"; };
-		B42AF93B15CEE4D7008878AE /* BufferedStream.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BufferedStream.m; sourceTree = "<group>"; };
+		B42AF93A15CEE4D7008878AE /* NSStream+Buffered.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSStream+Buffered.h"; sourceTree = "<group>"; };
+		B42AF93B15CEE4D7008878AE /* NSStream+Buffered.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSStream+Buffered.m"; sourceTree = "<group>"; };
 		B434309515C5C047002467FF /* NewsRCTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NewsRCTest.h; path = ../libnews/NewsRCTest.h; sourceTree = "<group>"; };
 		B434309615C5C047002467FF /* NewsRCTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = NewsRCTest.m; path = ../libnews/NewsRCTest.m; sourceTree = "<group>"; };
 		B48DA28015CB1ADC0054F619 /* NNTP.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = NNTP.h; sourceTree = "<group>"; };
@@ -132,14 +132,11 @@
 			children = (
 				B40DD33015C581DF001EB875 /* NewsRC.h */,
 				B40DD33115C581DF001EB875 /* NewsRC.m */,
-				B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */,
-				B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */,
 				B48DA28015CB1ADC0054F619 /* NNTP.h */,
 				B48DA28115CB1ADC0054F619 /* NNTP.m */,
-				B42AF93A15CEE4D7008878AE /* BufferedStream.h */,
-				B42AF93B15CEE4D7008878AE /* BufferedStream.m */,
 				B42AF92B15CD60CB008878AE /* List.h */,
 				B42AF92C15CD60CB008878AE /* List.m */,
+				B40EFDE015D7A01F0031B476 /* Cocoa Extensions */,
 				B40DD30E15C58180001EB875 /* Supporting Files */,
 			);
 			path = libnews;
@@ -176,6 +173,17 @@
 			name = "Supporting Files";
 			sourceTree = "<group>";
 		};
+		B40EFDE015D7A01F0031B476 /* Cocoa Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				B40EFDDB15D79BD10031B476 /* NSRunLoop+Sync.h */,
+				B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */,
+				B42AF93A15CEE4D7008878AE /* NSStream+Buffered.h */,
+				B42AF93B15CEE4D7008878AE /* NSStream+Buffered.m */,
+			);
+			name = "Cocoa Extensions";
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -186,7 +194,7 @@
 				B40DD33215C581DF001EB875 /* NewsRC.h in Headers */,
 				B48DA28215CB1ADC0054F619 /* NNTP.h in Headers */,
 				B42AF92D15CD60CB008878AE /* List.h in Headers */,
-				B42AF93C15CEE4D7008878AE /* BufferedStream.h in Headers */,
+				B42AF93C15CEE4D7008878AE /* NSStream+Buffered.h in Headers */,
 				B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -292,7 +300,7 @@
 				B40DD33315C581DF001EB875 /* NewsRC.m in Sources */,
 				B48DA28315CB1ADC0054F619 /* NNTP.m in Sources */,
 				B42AF92E15CD60CB008878AE /* List.m in Sources */,
-				B42AF93D15CEE4D7008878AE /* BufferedStream.m in Sources */,
+				B42AF93D15CEE4D7008878AE /* NSStream+Buffered.m in Sources */,
 				B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
