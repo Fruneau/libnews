@@ -21,7 +21,7 @@ NSString * const NNTPReplyLineKey    = @"NNTPReplyLineKey";
 NSString * const NNTPReplyCodeKey    = @"NNTPReplyCodeKey";
 NSString * const NNTPReplyMessageKey = @"NNTPReplyMessageKey";
 
-/** NNTP command.
+/** Declaring stuff.
  */
 
 typedef NSError * __autoreleasing NSErrorRef;
@@ -63,6 +63,9 @@ typedef enum NNTPCommandType {
     NNTPAuthinfoUser,
     NNTPAuthinfoPass,
     NNTPAuthinfoSASL,
+
+    /* Count */
+    NNTPCommand_count,
 } NNTPCommandType;
 
 typedef enum NNTPCapability {
@@ -105,11 +108,66 @@ typedef enum NNTPCapability {
     NNTPCapImplementation  = 1ul << 63,
 } NNTPCapability;
 
+/* Interfaces
+ */
+
+@interface NNTP () <NSStreamDelegate>
+{
+    NSInputStream  *_istream;
+    NSOutputStream *_ostream;
+    DList          *_commands;
+
+    @public
+    int             _nntpVersion;
+    NSString       *_implementation;
+    uint64_t        _capabilities;
+}
+
+- (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
+@end
+
+
+@interface NNTPCommand : NSObject <DListNode>
+{
+    @public
+    const struct NNTPCommandParams *_params;
+    NNTP __weak *_nntp;
+
+    NSInteger    _commandLineLen;
+    char         _commandLine[513];
+    unsigned     _sent      : 1;
+    unsigned     _gotHeader : 1;
+
+    int          _code;
+    NSString    *_message;
+
+    void (^_onDone)(NSError *error);
+}
+
+
++ (NNTPCommand *)command:(NNTPCommandType)type withNNTP:(NNTP *)nntp
+                 andArgs:(NSArray *)args;
+- (BOOL)send:(NSOutputStream *)stream;
+- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error;
+- (BOOL)readFromStream:(NSInputStream *)stream error:(NSErrorRef *)error;
+
+/* To be inherited */
+- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error;
+@end
+
+@interface NNTPCapabilitiesCommand: NNTPCommand
+@end
+
+
+/* Command descriptors
+ */
+
 NSDictionary *nntpCapabilitiesMap = nil;
 
 struct NNTPCommandParams {
     NNTPCommandType type;
     const char     *command;
+    const char     *className;
     const uint16_t *validCodes;
     uint64_t        capabilities;
 
@@ -126,6 +184,7 @@ struct NNTPCommandParams {
     [NNTPCapabilities] = {
         .type               = NNTPCapabilities,
         .command            = "CAPABILITIES",
+        .className          = "NNTPCapabilitiesCommand",
         .validCodes         = (const uint16_t[]){ 101, 0 },
         .isMultiline        = YES,
     },
@@ -375,69 +434,65 @@ struct NNTPCommandParams {
     }
 };
 
-@interface NNTPCommand : NSObject <DListNode>
-{
-    @public
-    const struct NNTPCommandParams *_params;
-    NNTP __weak *_nntp;
-
-    NSInteger    _commandLineLen;
-    char         _commandLine[513];
-    unsigned     _sent      : 1;
-    unsigned     _gotHeader : 1;
-    unsigned     _done      : 1;
-
-    int          _code;
-    NSString    *_message;
-    
-    BOOL (^_onLine)(NSString *line);
-    void (^_onDone)(NSError *error);
-}
-
-- (NNTPCommand *)init:(NNTPCommandType)type withNNTP:(NNTP *)nntp
-              andArgs:(NSArray *)args;
-- (BOOL)send:(NSOutputStream *)stream;
-- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error;
-- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error;
-- (BOOL)readFromStream:(NSInputStream *)stream;
-@end
+/* NNTP Command implementation
+ */
 
 @implementation NNTPCommand
 @synthesize prev;
 @synthesize next;
 @synthesize refs;
 
-- (NNTPCommand *)init:(NNTPCommandType)type withNNTP:(NNTP *)nntp
-              andArgs:(NSArray *)args
++ (NNTPCommand *)command:(NNTPCommandType)type withNNTP:(NNTP *)nntp
+                 andArgs:(NSArray *)args
 {
-    _nntp    = nntp;
-    _params  = &commandParams[type];
+    static Class commandClasses[NNTPCommand_count];
+    const struct NNTPCommandParams *param = &commandParams[type];
+    NNTPCommand *command;
+    
+    if ((nntp->_capabilities & param->capabilities) != param->capabilities) {
+        NSLog(@"/!\\ the server does not support that command: %s",
+              param->command);
+        return nil;
+    }
+    if (!commandClasses[type] && param->className) {
+        NSString *className = [NSString stringWithUTF8String:param->className];
 
-    if (_params->command) {
-        strcpy(_commandLine, _params->command);
-        _commandLineLen = strlen(_commandLine);
+        commandClasses[type] = NSClassFromString(className);
+        if (!commandClasses[type]) {
+            abort();
+        }
+    } else if (!commandClasses[type]) {
+        commandClasses[type] = [NNTPCommand class];
+    }
+    command = [commandClasses[type] new];
+    command->_nntp    = nntp;
+    command->_params  = param;
+
+    if (param->command) {
+        strcpy(command->_commandLine, param->command);
+        command->_commandLineLen = strlen(command->_commandLine);
 
         for (id arg in args) {
             NSString *desc    = [arg description];
             const char *chars = [desc UTF8String];
             NSInteger   len   = strlen(chars);
 
-            _commandLine[_commandLineLen++] = ' ';
-            if (len > 510 - _commandLineLen) {
+            command->_commandLine[command->_commandLineLen++] = ' ';
+            if (len > 510 - command->_commandLineLen) {
                 NSLog(@"line too long");
                 return nil;
             }
-            strcpy(_commandLine + _commandLineLen, chars);
-            _commandLineLen += len;
+            strcpy(command->_commandLine + command->_commandLineLen, chars);
+            command->_commandLineLen += len;
         }
 
-        _commandLine[_commandLineLen++] = '\r';
-        _commandLine[_commandLineLen++] = '\n';
-        _commandLine[_commandLineLen]   = '\0';
+        command->_commandLine[command->_commandLineLen++] = '\r';
+        command->_commandLine[command->_commandLineLen++] = '\n';
+        command->_commandLine[command->_commandLineLen]   = '\0';
     } else {
-        _sent = YES;
+        command->_sent = YES;
     }
-    return self;
+    return command;
 }
 
 - (BOOL)send:(NSOutputStream *)ostream
@@ -475,16 +530,6 @@ struct NNTPCommandParams {
     return [NSError errorWithDomain:NNTPErrorDomain code:code userInfo:dict];
 }
 
-- (BOOL)done:(NSError *)error
-{
-    if (_onDone) {
-        _onDone(error);
-    }
-    _onDone = nil;
-    _onLine = nil;
-    return YES;
-}
-
 - (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error
 {
     if (line.length < 5) {
@@ -504,9 +549,6 @@ struct NNTPCommandParams {
         return NO;
     }
 
-    if (!_params->isMultiline) {
-        _done = YES;
-    }
     _message = [line substringFromIndex:4];
     for (int i = 0; _params->validCodes[i] != 0; i++) {
         if (_params->validCodes[i] == _code) {
@@ -519,36 +561,35 @@ struct NNTPCommandParams {
 
 - (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
 {
-    NSString *l = line;
-
-    if ([line characterAtIndex:0] == '.') {
-        l = [line substringFromIndex:1];
-    }
-    if (!_onLine(l)) {
-        *error = [self error:NNTPInvalidDataError forLine:line];
-        return NO;
-    }
-    return YES;
+    [NSException raise:@"unimplemented"
+                format:@"not implemented in main class"];
+    return NO;
 }
 
-- (BOOL)readFromStream:(NSInputStream *)stream
+- (BOOL)readFromStream:(NSInputStream *)stream error:(NSErrorRef *)error
 {
     NSString *line;
 
     while ((line = [stream readLine])) {
-        NSErrorRef error = nil;
         NSLog(@">> %@", line);
 
         if (!_gotHeader) {
             _gotHeader = YES;
 
-            if (![self readHeader:line error:&error] || !_params->isMultiline) {
-                return [self done:error];
+            if (![self readHeader:line error:error] || !_params->isMultiline) {
+                return YES;
             }
         } else if ([line isEqualToString:@"."]) {
-            return [self done:error];
-        } else if (![self readLine:line error:&error]) {
-            return [self done:error];
+            return YES;
+        } else {
+            NSString *l = line;
+
+            if ([line characterAtIndex:0] == '.') {
+                l = [line substringFromIndex:1];
+            }
+            if (![self readLine:l error:error]) {
+                return YES;
+            }
         }
     }
     return NO;
@@ -560,56 +601,8 @@ struct NNTPCommandParams {
 }
 @end
 
-/** The NNTP interface implements the Stream delegation
- */
-
-@interface NNTP () <NSStreamDelegate>
-{
-    NSInputStream  *_istream;
-    NSOutputStream *_ostream;
-    DList          *_commands;
-    NSInteger       _syncTimeout;
-
-    int             _nntpVersion;
-    NSString       *_implementation;
-    uint64_t        _capabilities;
-}
-
-- (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
-@end
-
-
-@implementation NNTP
-@synthesize status = _status;
-
+@implementation NNTPCapabilitiesCommand
 - (id)init
-{
-    _commands = [DList new];
-    return self;
-}
-
-- (void)sendCommand:(NNTPCommandType)type withArgs:(NSArray *)array
-             onLine:(BOOL (^)(NSString *line))onLine
-             onDone:(void (^)(NSError *error))onDone
-{
-    NNTPCommand *command = [[NNTPCommand alloc] init:type
-                                            withNNTP:self
-                                             andArgs:array];
-    command->_onLine = onLine;
-    command->_onDone = onDone;
-
-    [_commands addTail:command];
-    if (_ostream.hasSpaceAvailable) {
-        [self flushCommands];
-    }
-}
-
-- (void)sendCommand:(NNTPCommandType)type
-{
-    [self sendCommand:type withArgs:nil onLine:nil onDone:nil];
-}
-
-- (void)refreshCapabilities:(void (^)(void))on_done
 {
     if (!nntpCapabilitiesMap) {
         nntpCapabilitiesMap = @{
@@ -623,7 +616,7 @@ struct NNTPCommandParams {
             @"NEWNEWS":         @(NNTPCapNewnews),
             @"HDR":             @(NNTPCapHdr),
             @"OVER":            @(NNTPCapOver),
-            @"LIST":            @{
+                @"LIST":            @{
                 @"ACTIVE":          @(NNTPCapListActive),
                 @"ACTIVE.TIMES":    @(NNTPCapListActiveTimes),
                 @"DISTRIB.PATS":    @(NNTPCapListDistribPats),
@@ -653,8 +646,111 @@ struct NNTPCommandParams {
             @"STREAMING":       @(NNTPCapStreaming),
         };
     }
+    return self;
+}
+
+- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
+{
+    NSCharacterSet *space = [NSCharacterSet whitespaceCharacterSet];
+    NSScanner *scanner = [NSScanner scannerWithString:line];
+    NSString  * __autoreleasing capability;
+
+    [scanner setCharactersToBeSkipped:nil];
+    [scanner scanUpToCharactersFromSet:space intoString:&capability];
+    capability = [capability uppercaseString];
+    [scanner setCharactersToBeSkipped:space];
+
+    id entry = nntpCapabilitiesMap[capability];
+    if (entry == nil) {
+        NSLog(@"unsupported capability: %@", line);
+        return YES;
+    } else if ([entry isKindOfClass:[NSNumber class]]) {
+        uint64_t v = [(NSNumber *)entry unsignedLongLongValue];
+
+        if (v == NNTPCapVersion) {
+            if (![scanner scanInt:&_nntp->_nntpVersion]) {
+                *error = [self error:NNTPInvalidDataError forLine:line];
+                return NO;
+            }
+            return YES;
+        } else if (v == NNTPCapImplementation) {
+            _nntp->_implementation = [scanner remainder];
+            return YES;
+        } else {
+            _nntp->_capabilities |= v;
+            return YES;
+        }
+    }
+
+    NSDictionary *sub = (NSDictionary *)entry;
+    while (![scanner isAtEnd]) {
+        NSString * __autoreleasing subtype;
+
+        [scanner scanUpToCharactersFromSet:space
+                                intoString:&subtype];
+        subtype = [subtype uppercaseString];
+
+        NSNumber *flag = sub[subtype];
+        if (flag == nil) {
+            NSLog(@"unsupported option %@ for capability %@",
+                  subtype, capability);
+            continue;
+        }
+        _nntp->_capabilities |= [(NSNumber *)flag unsignedLongLongValue];
+    }
+    return YES;
+}
+@end
 
 
+/** The NNTP interface implements the Stream delegation
+ */
+
+@implementation NNTP
+@synthesize status = _status;
+
+- (id)init
+{
+    _commands = [DList new];
+    return self;
+}
+
+- (BOOL)sendCommand:(NNTPCommandType)type withArgs:(NSArray *)array
+             onDone:(void (^)(NSError *error))onDone
+{
+    NNTPCommand *command = [NNTPCommand command:type withNNTP:self
+                                        andArgs:array];
+    if (!command) {
+        return NO;
+    }
+
+    if (command->_params->requireCapRefresh) {
+        command->_onDone = ^(NSError *error) {
+            if (!error) {
+                [self refreshCapabilities:onDone];
+            } else if (onDone) {
+                onDone(error);
+            }
+        };
+    } else {
+        command->_onDone = onDone;
+    }
+
+
+    [_commands addTail:command];
+    if (_ostream.hasSpaceAvailable) {
+        [self flushCommands];
+    }
+    return YES;
+}
+
+- (void)sendCommand:(NNTPCommandType)type
+{
+    [self sendCommand:type withArgs:nil onDone:nil];
+}
+
+- (void)refreshCapabilities:(void (^)(NSError *error))on_done
+{
     _nntpVersion    = 0;
     _implementation = nil;
     _capabilities   = 0;
@@ -662,64 +758,12 @@ struct NNTPCommandParams {
 
     [self sendCommand:NNTPCapabilities
              withArgs:nil
-               onLine:^ (NSString *line) {
-                   NSCharacterSet *space = [NSCharacterSet whitespaceCharacterSet];
-                   NSScanner *scanner = [NSScanner scannerWithString:line];
-                   NSString  * __autoreleasing capability;
-
-                   [scanner setCharactersToBeSkipped:nil];
-                   [scanner scanUpToCharactersFromSet:space intoString:&capability];
-                   capability = [capability uppercaseString];
-                   [scanner setCharactersToBeSkipped:space];
-
-                   id entry = nntpCapabilitiesMap[capability];
-                   if (entry == nil) {
-                       NSLog(@"unsupported capability: %@", line);
-                       return YES;
-                   } else if ([entry isKindOfClass:[NSNumber class]]) {
-                       uint64_t v = [(NSNumber *)entry unsignedLongLongValue];
-
-                       if (v == NNTPCapVersion) {
-                           if (![scanner scanInt:&_nntpVersion]) {
-                               return NO;
-                           }
-                           return YES;
-                       } else if (v == NNTPCapImplementation) {
-                           _implementation = [scanner remainder];
-                           return YES;
-                       } else {
-                           _capabilities |= v;
-                           return YES;
-                       }
-                   }
-
-                   NSDictionary *sub = (NSDictionary *)entry;
-                   while (![scanner isAtEnd]) {
-                       NSString * __autoreleasing subtype;
-
-                       [scanner scanUpToCharactersFromSet:space
-                                               intoString:&subtype];
-                       subtype = [subtype uppercaseString];
-
-                       NSNumber *flag = sub[subtype];
-                       if (flag == nil) {
-                           NSLog(@"unsupported option %@ for capability %@",
-                                 subtype, capability);
-                           continue;
-                       }
-                       _capabilities |= [(NSNumber *)flag unsignedLongLongValue];
-                   }
-                   return YES;
-               }
                onDone: ^ (NSError *error) {
-                   if (error) {
-                       return;
-                   }
                    if (_capabilities & NNTPCapReader) {
                        _status = NNTPReady;
                    }
                    if (on_done) {
-                       on_done();
+                       on_done(error);
                    }
                }];
 }
@@ -750,30 +794,20 @@ struct NNTPCommandParams {
     [_istream open];
     [_ostream open];
     
-    [self sendCommand:NNTPConnect];
-    [self refreshCapabilities:^{
-        if (_capabilities & NNTPCapReader) {
-            return;
-        } else if (!(_capabilities & NNTPCapModeReader)) {
-            [self close];
-            [NSException raise:@"invalid server"
-                        format:@"cannot post on that server"];
-        }
-        [self sendCommand:NNTPModeReader];
-        [self refreshCapabilities:nil];
-    }];
+    [self sendCommand:NNTPConnect withArgs:nil
+               onDone:^(NSError *error) {
+                   if (!error) {
+                       [self sendCommand:NNTPModeReader withArgs:nil
+                                  onDone:^(NSError *error2) {
+                                  }];
+                   }
+               }];
 }
 
 - (void)authenticate:(NSString *)login password:(NSString *)password
 {
-    if (!(_capabilities & NNTPCapAuthinfoUser)) {
-        [NSException raise:@"authentication not supported"
-                    format:@"the server does not support AUTHINFO USER "
-         "authentication method"];
-    }
-
     [self sendCommand:NNTPAuthinfoUser withArgs:@[ login ]
-               onLine:nil onDone:^(NSError *error) {
+               onDone:^(NSError *error) {
                    if (error) {
                        [self.delegate nntp:self
                                handleEvent:NNTPEventAuthenticationFailed];
@@ -782,7 +816,7 @@ struct NNTPCommandParams {
                }];
     if (password) {
         [self sendCommand:NNTPAuthinfoPass withArgs:@[ password ]
-                   onLine:nil onDone:^(NSError *error) {
+                   onDone:^(NSError *error) {
                        if (!error) {
                            [self.delegate nntp:self
                                    handleEvent:NNTPEventAuthenticated];
@@ -792,7 +826,6 @@ struct NNTPCommandParams {
                        }
                    }];
     }
-    [self refreshCapabilities:nil];
 }
 
 - (void)close
@@ -808,7 +841,7 @@ struct NNTPCommandParams {
                 return;
             }
         }
-        if (!command->_done && !command->_params->isPipelinable) {
+        if (!command->_params->isPipelinable) {
             return;
         }
     }
@@ -821,7 +854,9 @@ struct NNTPCommandParams {
                                          code:NNTPAbortedError
                                      userInfo:nil];
     for (NNTPCommand *command in _commands) {
-        [command done:error];
+        if (command->_onDone) {
+            command->_onDone(error);
+        }
         [_commands remove:command];
     }
     [_commands clear];
@@ -845,12 +880,16 @@ struct NNTPCommandParams {
         case NSStreamEventHasBytesAvailable:
             while (YES) {
                 NNTPCommand *command = _commands.head;
+                NSErrorRef   error;
 
                 if (!command || !command->_sent) {
                     return;
                 }
-                if ([command readFromStream:_istream]) {
+                if ([command readFromStream:_istream error:&error]) {
                     [_commands popHead];
+                    if (command->_onDone) {
+                        command->_onDone(error);
+                    }
                     [self flushCommands];
                 } else {
                     /* More data is needed by the current command */
