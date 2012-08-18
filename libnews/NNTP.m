@@ -131,7 +131,7 @@ typedef enum NNTPCapability {
 {
     @public
     const struct NNTPCommandParams *_params;
-    NNTP __weak *_nntp;
+    NNTP * __weak _nntp;
 
     NSInteger    _commandLineLen;
     char         _commandLine[513];
