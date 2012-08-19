@@ -18,6 +18,7 @@
 		B40EFDDE15D79BD10031B476 /* NSRunLoop+Sync.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */; };
 		B40EFDE715D803480031B476 /* NSScanner+Helpers.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDE515D803480031B476 /* NSScanner+Helpers.h */; };
 		B40EFDE815D803480031B476 /* NSScanner+Helpers.m in Sources */ = {isa = PBXBuildFile; fileRef = B40EFDE615D803480031B476 /* NSScanner+Helpers.m */; };
+		B40EFDED15E11B6C0031B476 /* utils.h in Headers */ = {isa = PBXBuildFile; fileRef = B40EFDEC15E11B6C0031B476 /* utils.h */; };
 		B42AF92915CC747A008878AE /* NNTPTest.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92815CC747A008878AE /* NNTPTest.m */; };
 		B42AF92D15CD60CB008878AE /* List.h in Headers */ = {isa = PBXBuildFile; fileRef = B42AF92B15CD60CB008878AE /* List.h */; };
 		B42AF92E15CD60CB008878AE /* List.m in Sources */ = {isa = PBXBuildFile; fileRef = B42AF92C15CD60CB008878AE /* List.m */; };
@@ -56,6 +57,7 @@
 		B40EFDDC15D79BD10031B476 /* NSRunLoop+Sync.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSRunLoop+Sync.m"; sourceTree = "<group>"; };
 		B40EFDE515D803480031B476 /* NSScanner+Helpers.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSScanner+Helpers.h"; sourceTree = "<group>"; };
 		B40EFDE615D803480031B476 /* NSScanner+Helpers.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSScanner+Helpers.m"; sourceTree = "<group>"; };
+		B40EFDEC15E11B6C0031B476 /* utils.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = utils.h; sourceTree = "<group>"; };
 		B42AF92715CC747A008878AE /* NNTPTest.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = NNTPTest.h; path = ../libnews/NNTPTest.h; sourceTree = "<group>"; };
 		B42AF92815CC747A008878AE /* NNTPTest.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = NNTPTest.m; path = ../libnews/NNTPTest.m; sourceTree = "<group>"; };
 		B42AF92B15CD60CB008878AE /* List.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = List.h; sourceTree = "<group>"; };
@@ -138,6 +140,7 @@
 				B40DD33115C581DF001EB875 /* NewsRC.m */,
 				B48DA28015CB1ADC0054F619 /* NNTP.h */,
 				B48DA28115CB1ADC0054F619 /* NNTP.m */,
+				B40EFDEC15E11B6C0031B476 /* utils.h */,
 				B42AF92B15CD60CB008878AE /* List.h */,
 				B42AF92C15CD60CB008878AE /* List.m */,
 				B40EFDE015D7A01F0031B476 /* Cocoa Extensions */,
@@ -203,6 +206,7 @@
 				B42AF93C15CEE4D7008878AE /* NSStream+Buffered.h in Headers */,
 				B40EFDDD15D79BD10031B476 /* NSRunLoop+Sync.h in Headers */,
 				B40EFDE715D803480031B476 /* NSScanner+Helpers.h in Headers */,
+				B40EFDED15E11B6C0031B476 /* utils.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

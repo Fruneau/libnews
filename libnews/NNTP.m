@@ -11,6 +11,7 @@
 #import "NSCharacterSet+Spaces.h"
 #import "NSScanner+Helpers.h"
 #import "List.h"
+#include "utils.h"
 
 /* Global stuff
  */
@@ -111,6 +112,8 @@ typedef enum NNTPCapability {
 /* Interfaces
  */
 
+typedef NSInteger (^NNTPOnDone)(NSError *error);
+
 @class NNTPCommandGroup;
 
 @interface NNTP () <NSStreamDelegate>
@@ -123,6 +126,7 @@ typedef enum NNTPCapability {
     int               _nntpVersion;
     NSString         *_implementation;
     uint64_t          _capabilities;
+    NNTPStatus        _status;
 }
 
 - (void)stream:(NSStream *)aStream handleEvent:(NSStreamEvent)eventCode;
@@ -133,11 +137,10 @@ typedef enum NNTPCapability {
 @property(readonly) BOOL hasPendingWrite;
 @property(readonly) BOOL hasPendingRead;
 
-- (BOOL)send;
-- (BOOL)read:(NSErrorRef *)error;
+- (NSInteger)send;
+- (NSInteger)read:(NSErrorRef *)error;
 
 - (void)abort:(NSError *)error;
-- (BOOL)onDone:(NSError *)error;
 @end
 
 @interface NNTPCommand : NSObject <NNTPCommand>
@@ -149,26 +152,27 @@ typedef enum NNTPCapability {
     NSInteger    _commandLineLen;
     char         _commandLine[513];
     BOOL         _sent;
+    BOOL         _done;
     BOOL         _gotHeader;
 
     int          _code;
     NSString    *_message;
 
-    BOOL (^_onDone)(NSError *error);
+    NNTPOnDone   _onDone;
 }
 
 
 + (NNTPCommand *)command:(NNTPCommandType)type withNNTP:(NNTP *)nntp
-                 andArgs:(NSArray *)args;
-- (BOOL)send;
-- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error;
-- (BOOL)read:(NSErrorRef *)error;
+                 andArgs:(NSArray *)args onDone:(NNTPOnDone)onDone;
+- (NSInteger)send;
+- (NSInteger)readHeader:(NSString *)line error:(NSErrorRef *)error;
+- (NSInteger)read:(NSErrorRef *)error;
 
 - (void)abort:(NSError *)error;
-- (BOOL)onDone:(NSError *)error;
+- (NSInteger)onDone:(NSError *)error;
 
 /* To be inherited */
-- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error;
+- (NSInteger)readLine:(NSString *)line error:(NSErrorRef *)error;
 @end
 
 @interface NNTPCapabilitiesCommand: NNTPCommand
@@ -180,24 +184,25 @@ typedef enum NNTPCapability {
     NNTP * __unsafe_unretained _nntp;
     DList *_commands;
 
-    BOOL   _sealed;
-    BOOL   _pipelinable;
+    BOOL     _sealed;
+    BOOL     _done;
+    NSError *_error;
 
-    BOOL (^_onDone)(NSError *error);
+    NNTPOnDone _onDone;
 }
 
 + (NNTPCommandGroup *)root:(NNTP *)nntp;
 
-- (NNTPCommandGroup *)addGroup:(BOOL (^)(NSError *error))onDone;
+- (NNTPCommandGroup *)addGroup:(NNTPOnDone)onDone;
 - (NNTPCommand *)addCommand:(NNTPCommandType)type andArgs:(NSArray *)args
-                     onDone:(BOOL (^)(NSError *error))onDone;
+                     onDone:(NNTPOnDone)onDone;
 - (NNTPCommand *)addCommand:(NNTPCommand *)command;
 - (void)seal;
 
-- (BOOL)send;
-- (BOOL)read:(NSErrorRef *)error;
+- (NSInteger)send;
+- (NSInteger)read:(NSErrorRef *)error;
 - (void)abort:(NSError *)error;
-- (BOOL)onDone:(NSError *)error;
+- (NSInteger)onDone:(NSError *)error;
 @end
 
 
@@ -486,19 +491,17 @@ struct NNTPCommandParams {
 @dynamic isPipelinable, hasPendingRead, hasPendingWrite;
 
 + (NNTPCommand *)command:(NNTPCommandType)type withNNTP:(NNTP *)nntp
-                 andArgs:(NSArray *)args
+                 andArgs:(NSArray *)args onDone:(NNTPOnDone)onDone
 {
     static Class commandClasses[NNTPCommand_count];
     const struct NNTPCommandParams *param = &commandParams[type];
     NNTPCommand *command;
 
-    /*
     if ((nntp->_capabilities & param->capabilities) != param->capabilities) {
         NSLog(@"/!\\ the server does not support that command: %s",
               param->command);
         return nil;
     }
-     */
 
     if (!commandClasses[type] && param->className) {
         NSString *className = [NSString stringWithUTF8String:param->className];
@@ -513,6 +516,7 @@ struct NNTPCommandParams {
     command = [commandClasses[type] new];
     command->_nntp    = nntp;
     command->_params  = param;
+    command->_onDone  = onDone;
 
     if (param->command) {
         strcpy(command->_commandLine, param->command);
@@ -543,7 +547,7 @@ struct NNTPCommandParams {
 
 - (BOOL)hasPendingRead
 {
-    return _sent;
+    return _sent && !_done;
 }
 
 - (BOOL)hasPendingWrite
@@ -551,19 +555,19 @@ struct NNTPCommandParams {
     return !_sent;
 }
 
-- (BOOL)send
+- (NSInteger)send
 {
     if (!_sent && [_nntp->_ostream hasCapacityAvailable:_commandLineLen]) {
         NSLog(@"<< %.*s", (int)_commandLineLen - 2, _commandLine);
         [_nntp->_ostream write:(const uint8_t *)_commandLine
                      maxLength:_commandLineLen];
         _sent = YES;
-        return YES;
+        return 1;
     }
-    return NO;
+    return 0;
 }
 
-- (NSError *)error:(NSInteger)code forLine:(NSString *)line
+- (NSInteger)error:(NSInteger)code forLine:(NSString *)line error:(NSErrorRef *)error
 {
     NSDictionary *dict;
     NSString     *cmd = [NSString stringWithUTF8String:_commandLine];
@@ -584,14 +588,14 @@ struct NNTPCommandParams {
         };
     }
 
-    return [NSError errorWithDomain:NNTPErrorDomain code:code userInfo:dict];
+    *error = [NSError errorWithDomain:NNTPErrorDomain code:code userInfo:dict];
+    return -1;
 }
 
-- (BOOL)readHeader:(NSString *)line error:(NSErrorRef *)error
+- (NSInteger)readHeader:(NSString *)line error:(NSErrorRef *)error
 {
     if (line.length < 5) {
-        *error = [self error:NNTPProtocoleError forLine:line];
-        return NO;
+        return [self error:NNTPProtocoleError forLine:line error:error];
     }
 
     NSString *code = [line substringToIndex:3];
@@ -602,28 +606,26 @@ struct NNTPCommandParams {
         || _code >= 600)
     {
         _code = 0;
-        *error = [self error:NNTPProtocoleError forLine:line];
-        return NO;
+        return [self error:NNTPProtocoleError forLine:line error:error];
     }
 
     _message = [line substringFromIndex:4];
     for (int i = 0; _params->validCodes[i] != 0; i++) {
         if (_params->validCodes[i] == _code) {
-            return YES;
+            return 0;
         }
     }
-    *error = [self error:NNTPUnexpectedResponseAnswerError forLine:line];
-    return NO;
+    return [self error:NNTPUnexpectedResponseAnswerError forLine:line error:error];
 }
 
-- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
+- (NSInteger)readLine:(NSString *)line error:(NSErrorRef *)error
 {
     [NSException raise:@"unimplemented"
                 format:@"not implemented in main class"];
-    return NO;
+    return -1;
 }
 
-- (BOOL)read:(NSErrorRef *)error
+- (NSInteger)read:(NSErrorRef *)error
 {
     NSString *line;
 
@@ -633,23 +635,22 @@ struct NNTPCommandParams {
         if (!_gotHeader) {
             _gotHeader = YES;
 
-            if (![self readHeader:line error:error] || !_params->isMultiline) {
-                return YES;
+            IGNORE(RETHROW([self readHeader:line error:error]));
+            if (!_params->isMultiline) {
+                return [self onDone:nil];
             }
         } else if ([line isEqualToString:@"."]) {
-            return YES;
+            return [self onDone:nil];
         } else {
             NSString *l = line;
 
             if ([line characterAtIndex:0] == '.') {
                 l = [line substringFromIndex:1];
             }
-            if (![self readLine:l error:error]) {
-                return YES;
-            }
+            IGNORE(RETHROW([self readLine:l error:error]));
         }
     }
-    return NO;
+    return 0;
 }
 
 - (BOOL)isPipelinable
@@ -657,15 +658,17 @@ struct NNTPCommandParams {
     return _params->isPipelinable;
 }
 
-- (BOOL)onDone:(NSError *)error
+- (NSInteger)onDone:(NSError *)error
 {
-    BOOL (^cb)(NSError *error) = _onDone;
+    NNTPOnDone cb = _onDone;
 
+    assert (!_done);
+    _done   = YES;
     _onDone = nil;
     if (cb) {
         return cb(error);
     }
-    return NO;
+    return error ? -1 : 0;
 }
 
 - (void)abort:(NSError *)error
@@ -732,7 +735,20 @@ struct NNTPCommandParams {
     return self;
 }
 
-- (BOOL)readLine:(NSString *)line error:(NSErrorRef *)error
+- (NSInteger)send
+{
+    NSInteger res = RETHROW([super send]);
+
+    if (res > 0) {
+        _nntp->_nntpVersion    = 0;
+        _nntp->_implementation = nil;
+        _nntp->_capabilities   = 0;
+        _nntp->_status         = NNTPConnected;
+    }
+    return res;
+}
+
+- (NSInteger)readLine:(NSString *)line error:(NSErrorRef *)error
 {
     NSCharacterSet *space = [NSCharacterSet whitespaceCharacterSet];
     NSScanner *scanner = [NSScanner scannerWithString:line];
@@ -746,22 +762,21 @@ struct NNTPCommandParams {
     id entry = nntpCapabilitiesMap[capability];
     if (entry == nil) {
         NSLog(@"unsupported capability: %@", line);
-        return YES;
+        return 0;
     } else if ([entry isKindOfClass:[NSNumber class]]) {
         uint64_t v = [(NSNumber *)entry unsignedLongLongValue];
 
         if (v == NNTPCapVersion) {
             if (![scanner scanInt:&_nntp->_nntpVersion]) {
-                *error = [self error:NNTPInvalidDataError forLine:line];
-                return NO;
+                return [self error:NNTPInvalidDataError forLine:line error:error];
             }
-            return YES;
+            return 0;
         } else if (v == NNTPCapImplementation) {
             _nntp->_implementation = [scanner remainder];
-            return YES;
+            return 0;
         } else {
             _nntp->_capabilities |= v;
-            return YES;
+            return 0;
         }
     }
 
@@ -781,7 +796,7 @@ struct NNTPCommandParams {
         }
         _nntp->_capabilities |= [(NSNumber *)flag unsignedLongLongValue];
     }
-    return YES;
+    return 0;
 }
 @end
 
@@ -791,8 +806,7 @@ struct NNTPCommandParams {
 
 @implementation NNTPCommandGroup
 @synthesize prev, next, refs;
-@synthesize isPipelinable = _pipelinable;
-@dynamic hasPendingRead, hasPendingWrite;
+@dynamic hasPendingRead, hasPendingWrite, isPipelinable;
 
 + (NNTPCommandGroup *)root:(NNTP *)nntp
 {
@@ -807,8 +821,11 @@ struct NNTPCommandParams {
     return self;
 }
 
-- (NNTPCommandGroup *)addGroup:(BOOL (^)(NSError *))onDone
+- (NNTPCommandGroup *)addGroup:(NNTPOnDone)onDone
 {
+    if (_sealed) {
+        return nil;
+    }
     NNTPCommandGroup *group = [NNTPCommandGroup root:_nntp];
     group->_onDone = onDone;
     [_commands addTail:group];
@@ -817,32 +834,48 @@ struct NNTPCommandParams {
 
 - (NNTPCommand *)addCommand:(NNTPCommand *)command
 {
+    if (_sealed) {
+        return nil;
+    }
     [_commands addTail:command];
     return command;
 }
 
 - (NNTPCommand *)addCommand:(NNTPCommandType)type andArgs:(NSArray *)args
-                     onDone:(BOOL (^)(NSError *))onDone
-                
+                     onDone:(NNTPOnDone)onDone
 {
+    if (_sealed) {
+        return nil;
+    }
+
     NNTPCommand *command = [NNTPCommand command:type withNNTP:_nntp
-                                        andArgs:args];
+                                        andArgs:args onDone:onDone];
     if (!command) {
         return nil;
     }
-    if (command->_params->requireCapRefresh) {
-        NNTPCommandGroup *group = [self addGroup:onDone];
-        [group addCommand:command];
-        [group addCommand:NNTPCapabilities andArgs:nil onDone:nil];
-    } else {
-        command->_onDone = onDone;
-        [self addCommand:command];
-    }
-    return command;
+    return [self addCommand:command];
 }
 
 - (void)seal
 {
+    BOOL needRefresh = NO;
+    for (id<NNTPCommand> c in _commands) {
+        if ([c isKindOfClass:[NNTPCommandGroup class]]) {
+            [(NNTPCommandGroup *)c seal];
+            continue;
+        }
+
+        NNTPCommand *command = (NNTPCommand *)c;
+        if (command->_params->requireCapRefresh) {
+            needRefresh = YES;
+        } else if (command->_params->type == NNTPCapabilities) {
+            needRefresh = NO;
+        }
+    }
+
+    if (needRefresh) {
+        [self addCommand:NNTPCapabilities andArgs:nil onDone:nil];
+    }
     _sealed = YES;
 }
 
@@ -869,64 +902,83 @@ struct NNTPCommandParams {
     return NO;
 }
 
-- (BOOL)send
+- (BOOL)isPipelinable
 {
-    for (id<NNTPCommand> command in _commands) {
-        if (command.hasPendingWrite) {
-            if (![command send]) {
-                return NO;
-            }
-        }
-        if (!command.isPipelinable) {
-            return NO;
-        }
+    if (!_sealed) {
+        return NO;
     }
-    return YES;
+    return [(id<NNTPCommand>)[_commands tail] isPipelinable];
 }
 
-- (BOOL)read:(NSErrorRef *)error
+- (NSInteger)send
+{
+    NSInteger sent = 0;
+
+    for (id<NNTPCommand> command in _commands) {
+        if (command.hasPendingWrite) {
+            if (!RETHROW([command send])) {
+                return sent;
+            }
+            sent++;
+        }
+        if (!command.isPipelinable) {
+            return sent;
+        }
+    }
+    return sent;
+}
+
+- (NSInteger)read:(NSErrorRef *)error
 {
     while (YES) {
         id<NNTPCommand> command = (id<NNTPCommand>)_commands.head;
 
         if (!command) {
-            return YES;
+            return [self onDone:nil];
         }
         if (!command.hasPendingRead) {
-            return NO;
+            return 0;
         }
-        if ([command read:error]) {
+
+        NSInteger res = [command read:error];
+        if (!command.hasPendingRead || res < 0) {
             [_commands popHead];
-            if (![command onDone:*error] && *error) {
-                return YES;
+            if (res < 0) {
+                IGNORE(RETHROW([self onDone:*error]));
+                [self abort:*error];
+                *error = nil;
             }
-            *error = nil;
             [self send];
         } else {
-            /* More data is needed by the current command */
-            return NO;
+            return 0;
         }
     }
 }
 
-- (BOOL)onDone:(NSError *)error
+- (NSInteger)onDone:(NSError *)error
 {
-    BOOL (^cb)(NSError *error) = _onDone;
+    NNTPOnDone cb = _onDone;
 
+    if (_done) {
+        return 0;
+    }
+    _done   = YES;
     _onDone = nil;
     if (cb) {
         return cb(error);
     }
-    return NO;
+    return error ? -1 : 0;
 }
 
 - (void)abort:(NSError *)error
 {
     for (id<NNTPCommand> cmd in _commands) {
         [cmd abort:error];
+        if (![cmd hasPendingRead]) {
+            [_commands remove:cmd];
+        }
     }
     [self onDone:error];
-    [_commands clear];
 }
 
 - (NSString *)description
@@ -961,7 +1013,7 @@ struct NNTPCommandParams {
 }
 
 - (BOOL)sendCommand:(NNTPCommandType)type withArgs:(NSArray *)array
-             onDone:(BOOL (^)(NSError *error))onDone
+             onDone:(NNTPOnDone)onDone
 {
     NNTPCommand *command = [_commands addCommand:type andArgs:array onDone:onDone];
     if (!command) {
@@ -969,10 +1021,6 @@ struct NNTPCommandParams {
     }
 
     if (command->_params->requireCapRefresh) {
-        _nntpVersion    = 0;
-        _implementation = nil;
-        _capabilities   = 0;
-        _status         = NNTPConnected;
     }
     if (_ostream.hasSpaceAvailable) {
         [_commands send];
@@ -1011,25 +1059,28 @@ struct NNTPCommandParams {
     [_istream open];
     [_ostream open];
 
+    _capabilities = NNTPCapModeReader;
+
     NNTP * __unsafe_unretained weakSelf = self;
-    NNTPCommandGroup *group = [_commands addGroup:^(NSError *error) {
+    NNTPCommandGroup *group = [_commands addGroup:^NSInteger (NSError *error) {
         if (error) {
-            return NO;
+            return -1;
         }
         if (weakSelf->_capabilities & NNTPCapReader) {
             weakSelf->_status = NNTPReady;
-            return YES;
+            return 0;
         }
-        return NO;
+        return -1;
     }];
     [group addCommand:NNTPConnect andArgs:nil onDone:nil];
     [group addCommand:NNTPModeReader andArgs:nil onDone:nil];
+    [group seal];
 }
 
 - (void)authenticate:(NSString *)login password:(NSString *)password
 {
     NNTP * __unsafe_unretained weakSelf = self;
-    NNTPCommandGroup *group = [_commands addGroup:^(NSError *error) {
+    NNTPCommandGroup *group = [_commands addGroup:^NSInteger (NSError *error) {
         if (error) {
             [weakSelf.delegate nntp:weakSelf
                         handleEvent:NNTPEventAuthenticationFailed];
@@ -1037,13 +1088,14 @@ struct NNTPCommandParams {
             [weakSelf.delegate nntp:weakSelf
                         handleEvent:NNTPEventAuthenticated];
         }
-        return YES;
+        return 0;
     }];
 
     [group addCommand:NNTPAuthinfoUser andArgs:@[ login] onDone:nil];
     if (password) {
         [group addCommand:NNTPAuthinfoPass andArgs:@[ password ] onDone:nil];
     }
+    [group seal];
 }
 
 - (void)close
